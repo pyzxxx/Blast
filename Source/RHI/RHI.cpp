@@ -5,8 +5,28 @@
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
 
+#define MAX_QUEUE_COUNT 2
+#define MAX_FRAMES_IN_FLIGHT 3
+#define MAX_CMD_BUFFER_COUNT 8
+
 namespace rhi
 {
+struct CommandPool
+{
+    uint32_t cmdIdx = 0;
+    VkCommandPool handle = VK_NULL_HANDLE;
+    CommandBuffer commandBuffers[MAX_CMD_BUFFER_COUNT] = {};
+};
+
+struct Frame
+{
+    VkFence fence = VK_NULL_HANDLE;
+    VkSemaphore copySemaphore = VK_NULL_HANDLE;
+    VkSemaphore acquireSemaphore = VK_NULL_HANDLE;
+    VkSemaphore releaseSemaphore = VK_NULL_HANDLE;
+    CommandPool pools[MAX_QUEUE_COUNT] = {};
+};
+
 struct Context
 {
     uint64_t frameCount = 0;
@@ -14,6 +34,7 @@ struct Context
     VkDevice device = VK_NULL_HANDLE;
     VkInstance instance = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    VkQueue queues[MAX_QUEUE_COUNT] = {};
 
     VkPhysicalDeviceProperties2 properties2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
     VkPhysicalDeviceVulkan11Properties properties_1_1 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES};
@@ -33,6 +54,8 @@ struct Context
     VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
 
     VmaAllocator allocator = VK_NULL_HANDLE;
+
+    Frame frames[MAX_FRAMES_IN_FLIGHT] = {};
 } s_ctx;
 
 struct ResourceManager
@@ -52,6 +75,9 @@ struct ResourceManager
     std::deque<std::pair<VkQueryPool, uint64_t>> destroyerQueryPools;
     std::deque<std::pair<VkAccelerationStructureKHR, uint64_t>> destroyerAccelerationStructures;
 } s_resMgr;
+
+static uint32_t GetFrameIndex() { return s_ctx.frameCount % MAX_FRAMES_IN_FLIGHT; }
+static Frame& GetFrame() { return s_ctx.frames[GetFrameIndex()]; }
 
 static bool IsLayerSupported(const char* required, const std::vector<VkLayerProperties>& available)
 {
@@ -250,57 +276,57 @@ void Startup()
     std::vector<VkQueueFamilyProperties> queueFamilyProperties(numQueueFamilies);
     vkGetPhysicalDeviceQueueFamilyProperties(s_ctx.physicalDevice, &numQueueFamilies, queueFamilyProperties.data());
 
-    const float graphicsQueuePrio = 0.0f;
-    const float copyQueuePrio = 0.1f;
-    uint32_t graphicsFamily = UINT32_MAX;
-    uint32_t copyFamily = UINT32_MAX;
+    std::array<uint32_t, QUEUE_COUNT> queueFamilys{};
+    queueFamilys.fill(UINT32_MAX);
+
     for (uint32_t i = 0; i < static_cast<uint32_t>(queueFamilyProperties.size()); ++i)
     {
         const auto& properties = queueFamilyProperties[i];
         const VkQueueFlags flags = properties.queueFlags;
 
-        if (copyFamily == UINT32_MAX &&
+        if (queueFamilys[QUEUE_COPY] == UINT32_MAX &&
             (flags & VK_QUEUE_TRANSFER_BIT) &&
             !(flags & VK_QUEUE_GRAPHICS_BIT) &&
             !(flags & VK_QUEUE_COMPUTE_BIT))
         {
-            copyFamily = i;
+            queueFamilys[QUEUE_COPY] = i;
         }
 
-        if (graphicsFamily == UINT32_MAX && (flags & VK_QUEUE_GRAPHICS_BIT))
+        if (queueFamilys[QUEUE_GRAPHICS] == UINT32_MAX && (flags & VK_QUEUE_GRAPHICS_BIT))
         {
-            graphicsFamily = i;
+            queueFamilys[QUEUE_GRAPHICS] = i;
         }
 
-        if (graphicsFamily != UINT32_MAX && copyFamily != UINT32_MAX)
+        if (queueFamilys[QUEUE_GRAPHICS] != UINT32_MAX && queueFamilys[QUEUE_COPY] != UINT32_MAX)
         {
             break;
         }
     }
 
-    if (copyFamily == UINT32_MAX)
+    if (queueFamilys[QUEUE_COPY] == UINT32_MAX)
     {
-        copyFamily = graphicsFamily;
+        queueFamilys[QUEUE_COPY] = queueFamilys[QUEUE_GRAPHICS];
     }
 
     std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-    queueCreateInfos.resize(2);
+    std::set<uint32_t> uniqueQueueFamilies(queueFamilys.begin(), queueFamilys.end());
 
-    queueCreateInfos[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queueCreateInfos[0].queueFamilyIndex = graphicsFamily;
-    queueCreateInfos[0].queueCount = 1;
-    queueCreateInfos[0].pQueuePriorities = &graphicsQueuePrio;
-
-    queueCreateInfos[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queueCreateInfos[1].queueFamilyIndex = copyFamily;
-    queueCreateInfos[1].queueCount = 1;
-    queueCreateInfos[1].pQueuePriorities = &copyQueuePrio;
+    float queuePriority = 1.0f;
+    for (uint32_t queueFamily : uniqueQueueFamilies)
+    {
+        VkDeviceQueueCreateInfo queueCreateInfo = {};
+        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queueCreateInfo.queueFamilyIndex = queueFamily;
+        queueCreateInfo.queueCount = 1;
+        queueCreateInfo.pQueuePriorities = &queuePriority;
+        queueCreateInfos.push_back(queueCreateInfo);
+    }
 
     VkDeviceCreateInfo deviceCreateInfo = {};
     deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     deviceCreateInfo.pNext = &s_ctx.features2;
     deviceCreateInfo.flags = 0;
-    deviceCreateInfo.queueCreateInfoCount = 2;
+    deviceCreateInfo.queueCreateInfoCount = queueCreateInfos.size();
     deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
     deviceCreateInfo.pEnabledFeatures = nullptr;
     deviceCreateInfo.enabledExtensionCount = (uint32_t)deviceExtensions.size();
@@ -356,10 +382,60 @@ void Startup()
         allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
     }
     VK_ASSERT(vmaCreateAllocator(&allocatorInfo, &s_ctx.allocator));
+
+    for (uint32_t i = 0; i < MAX_QUEUE_COUNT; ++i)
+    {
+        vkGetDeviceQueue(s_ctx.device, queueFamilys[i], 0, &s_ctx.queues[i]);
+    }
+
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+    {
+        Frame& frame = s_ctx.frames[i];
+
+        VkFenceCreateInfo fenceCreateInfo = {};
+        fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        VK_ASSERT(vkCreateFence(s_ctx.device, &fenceCreateInfo, nullptr, &frame.fence));
+
+        VkSemaphoreCreateInfo semaphoreCreateInfo = {};
+        semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        VK_ASSERT(vkCreateSemaphore(s_ctx.device, &semaphoreCreateInfo, nullptr, &frame.copySemaphore));
+        VK_ASSERT(vkCreateSemaphore(s_ctx.device, &semaphoreCreateInfo, nullptr, &frame.acquireSemaphore));
+        VK_ASSERT(vkCreateSemaphore(s_ctx.device, &semaphoreCreateInfo, nullptr, &frame.releaseSemaphore));
+
+        for (uint32_t j = 0; j < MAX_QUEUE_COUNT; ++j)
+        {
+            CommandPool& pool = frame.pools[j];
+            pool.cmdIdx = 0;
+
+            VkCommandPoolCreateInfo poolCreateInfo = {};
+            poolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+            poolCreateInfo.queueFamilyIndex = queueFamilys[j];
+            poolCreateInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+            VK_ASSERT(vkCreateCommandPool(s_ctx.device, &poolCreateInfo, nullptr, &pool.handle));
+
+            for (uint32_t k = 0; k < MAX_CMD_BUFFER_COUNT; ++k)
+            {
+                VkCommandBufferAllocateInfo cmdInfo = {};
+                cmdInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+                cmdInfo.commandBufferCount = 1;
+                cmdInfo.commandPool = pool.handle;
+                cmdInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+                VK_ASSERT(vkAllocateCommandBuffers(s_ctx.device, &cmdInfo, &pool.commandBuffers[k].handle));
+            }
+
+            VkCommandBufferBeginInfo cmdBeginInfo = {};
+            cmdBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            cmdBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+            cmdBeginInfo.pInheritanceInfo = nullptr;
+            VK_ASSERT(vkBeginCommandBuffer(pool.commandBuffers[0].handle, &cmdBeginInfo));
+        }
+    }
 }
 
 void Shutdown()
 {
+    vkDeviceWaitIdle(s_ctx.device);
+
 #ifdef VK_DEBUG
     if (s_ctx.debugMessenger != VK_NULL_HANDLE)
     {
@@ -367,8 +443,124 @@ void Shutdown()
         s_ctx.debugMessenger = VK_NULL_HANDLE;
     }
 #endif
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+    {
+        Frame& frame = s_ctx.frames[i];
+
+        vkDestroyFence(s_ctx.device, frame.fence, nullptr);
+
+        vkDestroySemaphore(s_ctx.device, frame.copySemaphore, nullptr);
+        vkDestroySemaphore(s_ctx.device, frame.acquireSemaphore, nullptr);
+        vkDestroySemaphore(s_ctx.device, frame.releaseSemaphore, nullptr);
+
+        for (uint32_t j = 0; j < MAX_QUEUE_COUNT; ++j)
+        {
+            CommandPool& pool = frame.pools[j];
+            vkDestroyCommandPool(s_ctx.device, pool.handle, nullptr);
+        }
+    }
     vmaDestroyAllocator(s_ctx.allocator);
     vkDestroyDevice(s_ctx.device, nullptr);
     vkDestroyInstance(s_ctx.instance, nullptr);
+}
+
+CommandBuffer* GetCmdBuffer(QueueType queueType)
+{
+    Frame& frame = GetFrame();
+    return &frame.pools[queueType].commandBuffers[frame.pools[queueType].cmdIdx];
+}
+
+void NextCmdBuffer(QueueType queueType)
+{
+    Frame& frame = GetFrame();
+    assert(frame.pools[queueType].cmdIdx < MAX_CMD_BUFFER_COUNT);
+    frame.pools[queueType].cmdIdx++;
+}
+
+void Submit()
+{
+    // Submit current frame
+    {
+        Frame& frame = GetFrame();
+
+        auto submitQueue = [&](QueueType queueType,
+                               std::span<VkSemaphore> signalSemaphores = {},
+                               std::span<VkSemaphore> waitSemaphores = {},
+                               std::span<VkPipelineStageFlags> waitStages = {})
+        {
+            CommandPool& pool = frame.pools[queueType];
+            VkCommandBuffer cmdBuffers[MAX_CMD_BUFFER_COUNT];
+            uint32_t cmdCount = pool.cmdIdx + 1;
+
+            for (uint32_t i = 0; i < cmdCount; ++i)
+            {
+                cmdBuffers[i] = pool.commandBuffers[i].handle;
+                vkEndCommandBuffer(cmdBuffers[i]);
+            }
+
+            VkSubmitInfo submitInfo = {};
+            submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            submitInfo.commandBufferCount = cmdCount;
+            submitInfo.pCommandBuffers = cmdBuffers;
+
+            if (!signalSemaphores.empty())
+            {
+                submitInfo.signalSemaphoreCount = static_cast<uint32_t>(signalSemaphores.size());
+                submitInfo.pSignalSemaphores = signalSemaphores.data();
+            }
+
+            if (!waitSemaphores.empty())
+            {
+                submitInfo.waitSemaphoreCount = static_cast<uint32_t>(waitSemaphores.size());
+                submitInfo.pWaitSemaphores = waitSemaphores.data();
+                submitInfo.pWaitDstStageMask = waitStages.data();
+            }
+
+            VK_ASSERT(vkQueueSubmit(s_ctx.queues[queueType], 1, &submitInfo, VK_NULL_HANDLE));
+        };
+
+        submitQueue(QUEUE_COPY, std::span(&frame.copySemaphore, 1));
+
+        uint32_t gfxWaitSemaphoreCount = 0;
+        VkSemaphore gfxWaitSemaphores[2];
+        VkPipelineStageFlags gfxWaitStages[2];
+        {
+            gfxWaitSemaphores[0] = frame.copySemaphore;
+            gfxWaitStages[0] = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            gfxWaitSemaphoreCount++;
+        }
+        submitQueue(
+            QUEUE_GRAPHICS,
+            std::span(&frame.releaseSemaphore, 1),
+            std::span(gfxWaitSemaphores, gfxWaitSemaphoreCount),
+            std::span(gfxWaitStages, gfxWaitSemaphoreCount));
+    }
+
+    s_ctx.frameCount++;
+
+    // Begin new frame
+    {
+        Frame& frame = GetFrame();
+
+        if (s_ctx.frameCount >= MAX_FRAMES_IN_FLIGHT)
+        {
+            VK_ASSERT(vkWaitForFences(s_ctx.device, 1, &frame.fence, true, UINT64_MAX));
+            VK_ASSERT(vkResetFences(s_ctx.device, 1, &frame.fence));
+
+            for (uint32_t i = 0; i < MAX_QUEUE_COUNT; ++i)
+            {
+                CommandPool& pool = frame.pools[i];
+                pool.cmdIdx = 0;
+
+                VK_ASSERT(vkResetCommandPool(s_ctx.device, pool.handle, 0));
+
+                VkCommandBufferBeginInfo cmdBeginInfo = {};
+                cmdBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+                cmdBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+                cmdBeginInfo.pInheritanceInfo = nullptr;
+                VK_ASSERT(vkBeginCommandBuffer(pool.commandBuffers[0].handle, &cmdBeginInfo));
+            }
+        }
+    }
 }
 } // namespace rhi

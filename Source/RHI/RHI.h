@@ -11,7 +11,11 @@
 #include <volk.h>
 #include <vk_mem_alloc.h>
 
+#include <array>
+#include <algorithm>
 #include <deque>
+#include <set>
+#include <span>
 #include <vector>
 
 #define VK_DEBUG
@@ -31,7 +35,8 @@ namespace rhi
 enum QueueType
 {
     QUEUE_GRAPHICS = 0,
-    QUEUE_COPY = 1
+    QUEUE_COPY = 1,
+    QUEUE_COUNT = 2
 };
 
 struct BufferDesc
@@ -52,6 +57,15 @@ struct Buffer
     VmaMemoryUsage memoryUsage;
 };
 
+struct CommandBuffer
+{
+    VkCommandBuffer handle;
+};
+
 void Startup();
 void Shutdown();
+
+CommandBuffer* GetCmdBuffer(QueueType queueType = QUEUE_GRAPHICS);
+void NextCmdBuffer(QueueType queueType = QUEUE_GRAPHICS);
+void Submit();
 } // namespace rhi
