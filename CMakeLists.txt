@@ -8,8 +8,8 @@ add_executable(Blast ${SOURCE_FILES})
 target_include_directories(Blast PUBLIC "Source")
 
 # spirv_reflect
-add_library(spirv_reflect INTERFACE)
-target_include_directories(spirv_reflect INTERFACE Extern/spirv_reflect)
+add_library(spirv_reflect STATIC Extern/spirv_reflect/spirv_reflect.c Extern/spirv_reflect/spirv_reflect.h)
+target_include_directories(Blast PUBLIC Extern/spirv_reflect)
 target_link_libraries(Blast PUBLIC spirv_reflect)
 
 # volk
