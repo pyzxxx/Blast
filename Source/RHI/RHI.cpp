@@ -8,7 +8,7 @@
 #define RHI_MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define RHI_MIN(a, b) (((a) < (b)) ? (a) : (b))
 
-namespace rhi
+namespace RHI
 {
 struct Frame
 {
@@ -1161,7 +1161,7 @@ VkImageAspectFlags GetAspectMask(VkFormat format)
     return result;
 }
 
-void cmdPipelineBarrier(CommandBuffer* cmd, std::span<BufferBarrier> bufferBarriers, std::span<ImageBarrier> imageBarriers, std::span<GenericBarrier> genericBarriers)
+void SubmitBarriers(CommandBuffer* cmd, std::span<GenericBarrier> genericBarriers, std::span<BufferBarrier> bufferBarriers, std::span<ImageBarrier> imageBarriers)
 {
     if (genericBarriers.empty() && bufferBarriers.empty() && imageBarriers.empty())
     {
@@ -1243,6 +1243,65 @@ void cmdPipelineBarrier(CommandBuffer* cmd, std::span<BufferBarrier> bufferBarri
     vkCmdPipelineBarrier2(cmd->handle, &dependencyInfo);
 }
 
+void CmdBeginPipelineBarrier(CommandBuffer* cmd)
+{
+    cmd->inBarrierScope = true;
+    cmd->scopedGenericBarriers.clear();
+    cmd->scopedBufferBarriers.clear();
+    cmd->scopedImageBarriers.clear();
+}
+
+void CmdPipelineBarrier(CommandBuffer* cmd, GenericBarrier genericBarrier)
+{
+    if (cmd->inBarrierScope)
+    {
+        cmd->scopedGenericBarriers.push_back(genericBarrier);
+    }
+    else
+    {
+        SubmitBarriers(cmd, std::span<GenericBarrier>(&genericBarrier, 1), {}, {});
+    }
+}
+
+void CmdPipelineBarrier(CommandBuffer* cmd, BufferBarrier bufferBarrier)
+{
+    if (cmd->inBarrierScope)
+    {
+        cmd->scopedBufferBarriers.push_back(bufferBarrier);
+    }
+    else
+    {
+        SubmitBarriers(cmd, {}, std::span<BufferBarrier>(&bufferBarrier, 1), {});
+    }
+}
+
+void CmdPipelineBarrier(CommandBuffer* cmd, ImageBarrier imageBarrier)
+{
+    if (cmd->inBarrierScope)
+    {
+        cmd->scopedImageBarriers.push_back(imageBarrier);
+    }
+    else
+    {
+        SubmitBarriers(cmd, {}, {}, std::span<ImageBarrier>(&imageBarrier, 1));
+    }
+}
+
+void CmdEndPipelineBarrier(CommandBuffer* cmd)
+{
+    SubmitBarriers(
+        cmd,
+        cmd->scopedGenericBarriers,
+        cmd->scopedBufferBarriers,
+        cmd->scopedImageBarriers
+    );
+
+    cmd->inBarrierScope = false;
+    cmd->scopedGenericBarriers.clear();
+    cmd->scopedBufferBarriers.clear();
+    cmd->scopedImageBarriers.clear();
+}
+
 void Submit(CommandBuffer* cmd)
 {
     vkEndCommandBuffer(cmd->handle);
@@ -1300,4 +1359,4 @@ void NextFrame()
         UpdateResourceMgr(s_ctx.frameCount, RHI_MAX_FRAMES_IN_FLIGHT);
     }
 }
-} // namespace rhi
+} // namespace RHI

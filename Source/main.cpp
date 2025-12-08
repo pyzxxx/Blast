@@ -1,8 +1,9 @@
 #include "RHI/RHI.h"
+#include "Foundation/FileSystem.h"
 
 int main()
 {
-    rhi::Startup();
-    rhi::Shutdown();
+    RHI::Startup();
+    RHI::Shutdown();
     return 0;
 }

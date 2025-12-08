@@ -37,7 +37,7 @@
 #define RHI_MAX_VERTEX_BUFFER_COUNT 4
 #define RHI_MAX_VERTEX_ATTRIB_COUNT 16
 
-namespace rhi
+namespace RHI
 {
 struct BufferDesc
 {
@@ -293,6 +293,11 @@ struct ImageBarrier
 struct CommandBuffer
 {
     VkCommandBuffer handle;
+
+    bool inBarrierScope = false;
+    std::vector<GenericBarrier> scopedGenericBarriers;
+    std::vector<BufferBarrier> scopedBufferBarriers;
+    std::vector<ImageBarrier> scopedImageBarriers;
 };
 
 void Startup();
@@ -325,9 +330,13 @@ SwapchainStatus UpdateSwapchain(Swapchain* swapchain);
 void DestroySwapchain(Swapchain* swapchain);
 
 CommandBuffer* RequestCommandBuffer();
-void cmdPipelineBarrier(CommandBuffer* cmd, std::span<BufferBarrier> bufferBarriers, std::span<ImageBarrier> imageBarriers, std::span<GenericBarrier> genericBarriers);
+void CmdBeginPipelineBarrier(CommandBuffer* cmd);
+void CmdPipelineBarrier(CommandBuffer* cmd, GenericBarrier genericBarrier);
+void CmdPipelineBarrier(CommandBuffer* cmd, BufferBarrier bufferBarrier);
+void CmdPipelineBarrier(CommandBuffer* cmd, ImageBarrier imageBarrier);
+void CmdEndPipelineBarrier(CommandBuffer* cmd);
 void Submit(CommandBuffer* cmd);
 
 void WaitIdle();
 void NextFrame();
-} // namespace rhi
+} // namespace RHI
