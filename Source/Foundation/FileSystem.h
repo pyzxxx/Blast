@@ -30,8 +30,16 @@ enum class FileMode
 bool IsFile(const std::string& path);
 bool IsDirectory(const std::string& path);
 void CopyFile(const std::string& from, const std::string& to);
+void MakeDirectory(const std::string& path, bool recursive = true);
 bool RemoveFile(const std::string& path);
 bool RemoveDirectory(const std::string& path, bool recursive);
+
+class Path
+{
+public:
+    static std::string FileName(const std::string& path);
+    static std::string ParentPath(const std::string& path);
+};
 
 class File
 {

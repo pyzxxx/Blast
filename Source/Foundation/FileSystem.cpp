@@ -18,6 +18,18 @@ void CopyFile(const std::string& from, const std::string& to)
     std::filesystem::copy_file(from, to, std::filesystem::copy_options::overwrite_existing);
 }
 
+void MakeDirectory(const std::string& path, bool recursive)
+{
+    if (recursive)
+    {
+        std::filesystem::create_directories(path);
+    }
+    else
+    {
+        std::filesystem::create_directory(path);
+    }
+}
+
 bool RemoveFile(const std::string& path)
 {
     return std::filesystem::remove(path);
@@ -33,6 +45,16 @@ bool RemoveDirectory(const std::string& path, bool recursive)
     {
         return std::filesystem::remove(path);
     }
+}
+
+std::string Path::FileName(const std::string& path)
+{
+    return std::filesystem::path(path).filename().string();
+}
+
+std::string Path::ParentPath(const std::string& path)
+{
+    return std::filesystem::path(path).parent_path().string();
 }
 
 File* File::Open(const std::string& path, FileMode mode, FileError* error)
