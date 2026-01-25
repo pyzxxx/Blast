@@ -4,7 +4,5 @@
 
 int main()
 {
-    RHI::Startup();
-    RHI::Shutdown();
     return 0;
 }

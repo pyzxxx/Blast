@@ -5,6 +5,13 @@ set(BASE_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 file(GLOB_RECURSE SOURCE_FILES "${BASE_ROOT_DIR}/*.h" "${BASE_ROOT_DIR}/*.cpp")
 add_library(Base STATIC ${SOURCE_FILES})
 
+# glm
+target_include_directories(Base PUBLIC ${EXTERN_DIR}/glm)
+target_compile_definitions(Base PUBLIC
+    GLM_ENABLE_EXPERIMENTAL=1
+    GLM_FORCE_DEPTH_ZERO_TO_ONE=1
+)
+
 # spirv_reflect
 add_library(spirv_reflect STATIC ${EXTERN_DIR}/spirv_reflect/spirv_reflect.c ${EXTERN_DIR}/spirv_reflect/spirv_reflect.h)
 target_include_directories(Base PUBLIC ${EXTERN_DIR}/spirv_reflect)
