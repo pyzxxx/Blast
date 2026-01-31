@@ -12,6 +12,11 @@ target_compile_definitions(Base PUBLIC
     GLM_FORCE_DEPTH_ZERO_TO_ONE=1
 )
 
+# rapidjson
+add_library(rapidjson INTERFACE)
+target_include_directories(rapidjson INTERFACE ${EXTERN_DIR}/rapidjson/include)
+target_link_libraries(Base PUBLIC rapidjson)
+
 # spirv_reflect
 add_library(spirv_reflect STATIC ${EXTERN_DIR}/spirv_reflect/spirv_reflect.c ${EXTERN_DIR}/spirv_reflect/spirv_reflect.h)
 target_include_directories(Base PUBLIC ${EXTERN_DIR}/spirv_reflect)
