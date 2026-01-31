@@ -1,3 +1,6 @@
 [submodule "Extern/glfw"]
 	path = Extern/glfw
 	url = https://github.com/glfw/glfw.git
+[submodule "Extern/rapidjson"]
+	path = Extern/rapidjson
+	url = https://github.com/Tencent/rapidjson.git
