@@ -1,5 +1,6 @@
 # Blast
 ## Third party software
+- [cgltf](https://github.com/jkuhlmann/cgltf)
 - [glfw](https://github.com/glfw/glfw)
 - [glm](https://github.com/g-truc/glm)
 - [rapidjson](https://github.com/Tencent/rapidjson)

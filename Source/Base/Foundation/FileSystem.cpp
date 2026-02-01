@@ -47,6 +47,11 @@ bool RemoveDirectory(const std::string& path, bool recursive)
     }
 }
 
+std::string Path::Extension(const std::string& path)
+{
+    return std::filesystem::path(path).extension().string();
+}
+
 std::string Path::FileName(const std::string& path)
 {
     return std::filesystem::path(path).filename().string();

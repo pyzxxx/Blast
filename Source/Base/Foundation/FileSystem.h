@@ -37,6 +37,7 @@ bool RemoveDirectory(const std::string& path, bool recursive);
 class Path
 {
 public:
+    static std::string Extension(const std::string& path);
     static std::string FileName(const std::string& path);
     static std::string ParentPath(const std::string& path);
 };
