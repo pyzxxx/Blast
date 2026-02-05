@@ -25,6 +25,8 @@ public:
         m_writer = std::make_unique<rapidjson::PrettyWriter<rapidjson::StringBuffer>>(*m_buffer);
     }
 
+    size_t GetSize() { return m_buffer->GetSize(); }
+
     const char* GetString() { return m_buffer->GetString(); }
 
     void Object(std::function<void()> func)

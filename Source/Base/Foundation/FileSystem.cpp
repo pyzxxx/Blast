@@ -1,5 +1,7 @@
 #include "FileSystem.h"
 
+#include <regex>
+
 namespace FS
 {
 bool IsFile(const std::string& path)
@@ -54,12 +56,35 @@ std::string Path::Extension(const std::string& path)
 
 std::string Path::FileName(const std::string& path)
 {
+    return std::filesystem::path(path).stem().string();
+}
+
+std::string Path::FullFileName(const std::string& path)
+{
     return std::filesystem::path(path).filename().string();
 }
 
 std::string Path::ParentPath(const std::string& path)
 {
     return std::filesystem::path(path).parent_path().string();
+}
+
+std::map<std::string, std::string> Path::s_protocols;
+void Path::RegisterProtocol(const std::string& proto, const std::string& path)
+{
+    s_protocols[proto + "://"] = path;
+}
+
+std::string Path::FixPath(const std::string& path)
+{
+    for (auto& proto : s_protocols)
+    {
+        if (path.find(proto.first) != std::string::npos)
+        {
+            return std::regex_replace(path, std::regex(proto.first), proto.second);
+        }
+    }
+    return path;
 }
 
 File* File::Open(const std::string& path, FileMode mode, FileError* error)
