@@ -70,6 +70,8 @@ public:
             m_writer->Bool(val);
         else if constexpr (std::is_same_v<ValueType, std::string>)
             m_writer->String(val.c_str());
+        else if constexpr (std::is_same_v<ValueType, const char*>)
+            m_writer->String(val);
         else if constexpr (std::is_same_v<ValueType, glm::vec2>)
         {
             m_writer->StartArray();

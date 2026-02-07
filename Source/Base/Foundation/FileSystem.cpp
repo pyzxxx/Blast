@@ -14,7 +14,7 @@ bool IsDirectory(const std::string& path)
     return std::filesystem::exists(path) && std::filesystem::is_directory(path);
 }
 
-void CopyFile(const std::string& from, const std::string& to)
+void DuplicateFile(const std::string& from, const std::string& to)
 {
     std::filesystem::create_directories(std::filesystem::path(to).parent_path());
     std::filesystem::copy_file(from, to, std::filesystem::copy_options::overwrite_existing);
