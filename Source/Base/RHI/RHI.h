@@ -18,6 +18,7 @@
 #include <set>
 #include <span>
 #include <vector>
+#include <optional>
 #include <unordered_map>
 
 #define VK_DEBUG
@@ -36,12 +37,14 @@
 #define RHI_MAX_ATTACHMENT_COUNT 4
 #define RHI_MAX_VERTEX_BUFFER_COUNT 4
 #define RHI_MAX_VERTEX_ATTRIB_COUNT 16
+#define RHI_MAX_BINDING_COUNT 32
 
 namespace RHI
 {
 struct BufferDesc
 {
     size_t size;
+    bool multiBuffer = false;
     VmaMemoryUsage memoryUsage;
     VkBufferUsageFlags bufferUsage;
 };
@@ -55,6 +58,16 @@ struct Buffer
 
     size_t size;
     VmaMemoryUsage memoryUsage;
+
+    bool multiBuffer = false;
+    uint32_t currentWriteIndex;
+    uint64_t lastWriteFrame;
+};
+
+struct StageAllocation
+{
+    Buffer* buffer = nullptr;
+    uint64_t offset = 0;
 };
 
 struct TextureDesc
@@ -290,10 +303,31 @@ struct ImageBarrier
     VkAccessFlags2 dstAccess;
 };
 
+struct ResourceBinding
+{
+    std::vector<VkDescriptorBufferInfo> buffers;
+    std::vector<VkDescriptorImageInfo> images;
+};
+
+struct ResourceTable
+{
+    bool dirty = false;
+    std::vector<ResourceBinding> bindings;
+};
+
 struct CommandBuffer
 {
     VkCommandBuffer handle;
 
+    // Dynamic descriptor pool
+    uint32_t maxSets = 256;
+    VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+
+    // Pipeline binding
+    Pipeline* currentPipeline = nullptr;
+    ResourceTable table = {};
+
+    // Barrier
     bool inBarrierScope = false;
     std::vector<GenericBarrier> scopedGenericBarriers;
     std::vector<BufferBarrier> scopedBufferBarriers;
@@ -308,6 +342,10 @@ uint8_t GetMaxFramesInFlight();
 
 void CreateBuffer(const BufferDesc& desc, Buffer*& buffer);
 void DestroyBuffer(Buffer* buffer);
+void* MapMemory(Buffer* buffer);
+void UnmapMemory(Buffer* buffer);
+
+StageAllocation RequestStageBuffer(size_t size);
 
 void CreateTexture(const TextureDesc& desc, Texture*& texture);
 void DestroyTexture(Texture* texture);
@@ -330,11 +368,36 @@ SwapchainStatus UpdateSwapchain(Swapchain* swapchain);
 void DestroySwapchain(Swapchain* swapchain);
 
 CommandBuffer* RequestCommandBuffer();
+
+void CmdCopyBuffer(CommandBuffer* cmd, Buffer* src, Buffer* dst, VkBufferCopy range);
+void CmdUploadBuffer(CommandBuffer* cmd, Buffer* buffer, uint32_t size, uint32_t offset, void* data);
+
+void CmdBeginRendering(CommandBuffer* cmd, const RenderingInfo& renderingInfo);
+void CmdEndRendering(CommandBuffer* cmd);
+void CmdSetScissor(CommandBuffer* cmd, int32_t left, int32_t top, int32_t right, int32_t bottom);
+void CmdSetViewport(CommandBuffer* cmd, float x, float y, float w, float h, float minDepth = 0.0f, float maxDepth = 1.0f);
+
+void CmdBindPipeline(CommandBuffer* cmd, Pipeline* pipeline);
+void CmdBindTexture(CommandBuffer* cmd, uint32_t binding, Texture* texture, int view);
+void CmdBindBuffer(CommandBuffer* cmd, uint32_t binding, Buffer* buffer, uint64_t size = 0, uint64_t offset = 0);
+void CmdBindSampler(CommandBuffer* cmd, uint32_t binding, Sampler* sampler);
+void CmdPushConstants(CommandBuffer* cmd, const void* data, uint32_t size);
+
+void CmdDraw(CommandBuffer* cmd, uint32_t vertexCount, uint32_t vertexOffset);
+void CmdDraw(CommandBuffer* cmd, uint32_t vertexCount, uint32_t instanceCount, uint32_t vertexOffset, uint32_t instanceOffset);
+void CmdDrawIndexed(CommandBuffer* cmd, uint32_t indexCount, uint32_t indexOffset, int32_t vertexOffset);
+void CmdDrawIndexed(CommandBuffer* cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t indexOffset, int32_t vertexOffset, uint32_t instanceOffset);
+void CmdDrawIndirect(CommandBuffer* cmd, Buffer* buffer, uint64_t offset, uint32_t drawCount, uint32_t stride);
+void CmdDrawIndexedIndirect(CommandBuffer* cmd, Buffer* buffer, uint64_t offset, uint32_t drawCount, uint32_t stride);
+void CmdDispatch(CommandBuffer* cmd, uint32_t threadGroupX, uint32_t threadGroupY, uint32_t threadGroupZ);
+void CmdDispatchIndirect(CommandBuffer* cmd, Buffer* buffer, uint64_t offset);
+
 void CmdBeginPipelineBarrier(CommandBuffer* cmd);
 void CmdPipelineBarrier(CommandBuffer* cmd, GenericBarrier genericBarrier);
 void CmdPipelineBarrier(CommandBuffer* cmd, BufferBarrier bufferBarrier);
 void CmdPipelineBarrier(CommandBuffer* cmd, ImageBarrier imageBarrier);
 void CmdEndPipelineBarrier(CommandBuffer* cmd);
+
 void Submit(CommandBuffer* cmd);
 
 void WaitIdle();
