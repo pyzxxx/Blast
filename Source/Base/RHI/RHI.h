@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PCH.h"
 #include "Foundation/Log.h"
 
 #ifdef _WIN32
@@ -11,15 +12,6 @@
 #include <volk.h>
 #include <vk_mem_alloc.h>
 #include <spirv_reflect.h>
-
-#include <array>
-#include <algorithm>
-#include <deque>
-#include <set>
-#include <span>
-#include <vector>
-#include <optional>
-#include <unordered_map>
 
 #define VK_DEBUG
 
@@ -36,7 +28,7 @@
 #define RHI_MAX_FRAMES_IN_FLIGHT 3
 #define RHI_MAX_ATTACHMENT_COUNT 4
 #define RHI_MAX_VERTEX_BUFFER_COUNT 4
-#define RHI_MAX_VERTEX_ATTRIB_COUNT 16
+#define RHI_MAX_VERTEX_ATTRIB_COUNT 8
 #define RHI_MAX_BINDING_COUNT 32
 
 namespace RHI
@@ -44,7 +36,7 @@ namespace RHI
 struct BufferDesc
 {
     size_t size;
-    bool multiBuffer = false;
+    bool dynamicBuffer = false;
     VmaMemoryUsage memoryUsage;
     VkBufferUsageFlags bufferUsage;
 };
@@ -59,7 +51,7 @@ struct Buffer
     size_t size;
     VmaMemoryUsage memoryUsage;
 
-    bool multiBuffer = false;
+    bool dynamicBuffer = false;
     uint32_t currentWriteIndex;
     uint64_t lastWriteFrame;
 };
@@ -99,10 +91,19 @@ struct Texture
     VkFormat format;
     VkImage handle;
     VmaAllocation allocation = VK_NULL_HANDLE;
-    VkAccessFlags2 accessMask = 0;
-    VkPipelineStageFlags2 stageMask = 0;
-    VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
     std::vector<TextureView> views;
+};
+
+struct TextureRegion
+{
+    uint32_t x = 0;
+    uint32_t y = 0;
+    uint32_t z = 0;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t depth = 1;
+    uint32_t mipLevel = 0;
+    uint32_t baseArrayLayer = 0;
 };
 
 struct EzSamplerDesc
@@ -133,14 +134,7 @@ struct Shader
     std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
 };
 
-struct RenderingFormat
-{
-    VkFormat depth = VK_FORMAT_UNDEFINED;
-    VkFormat stencil = VK_FORMAT_UNDEFINED;
-    std::array<VkFormat, RHI_MAX_ATTACHMENT_COUNT> colors = {};
-};
-
-struct RenderingAttachmentInfo
+struct RenderPassAttachmentDesc
 {
     Texture* texture = nullptr;
     int textureView = 0;
@@ -152,13 +146,18 @@ struct RenderingAttachmentInfo
     VkClearValue clearValue = {};
 };
 
-struct RenderingInfo
+struct RenderPassDesc
 {
+    RenderPassAttachmentDesc depth;
+    RenderPassAttachmentDesc stencil;
+    std::array<RenderPassAttachmentDesc, RHI_MAX_ATTACHMENT_COUNT> colors;
+};
+
+struct RenderPass
+{
+    RenderPassDesc desc;
     uint32_t width = 0;
     uint32_t height = 0;
-    RenderingAttachmentInfo depth = {};
-    RenderingAttachmentInfo stencil = {};
-    std::array<RenderingAttachmentInfo, RHI_MAX_ATTACHMENT_COUNT> colors = {};
 };
 
 struct VertexAttrib
@@ -176,8 +175,8 @@ struct VertexBinding
 
 struct VertexLayout
 {
-    std::array<VertexBinding, RHI_MAX_VERTEX_ATTRIB_COUNT> bindings = {};
-    std::array<VertexAttrib, RHI_MAX_VERTEX_BUFFER_COUNT> attributes = {};
+    std::array<VertexBinding, RHI_MAX_VERTEX_BUFFER_COUNT> bindings = {};
+    std::array<VertexAttrib, RHI_MAX_VERTEX_ATTRIB_COUNT> attributes = {};
 };
 
 struct BlendState
@@ -230,12 +229,12 @@ struct GraphicsPipelineDesc
 {
     Shader* vertexShader = nullptr;
     Shader* fragmentShader = nullptr;
+    RenderPass* renderPass = nullptr;
     VertexLayout vertexLayout = {};
     BlendState blendState = {};
     DepthState depthState = {};
     StencilState stencilState = {};
     MultisampleState multisampleState = {};
-    RenderingFormat renderingFormat = {};
     VkPolygonMode fillMode = VK_POLYGON_MODE_FILL;
     VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
     VkFrontFace frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
@@ -250,6 +249,7 @@ struct Pipeline
     VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
     VkPushConstantRange pushConstants = {};
     std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
+    std::unordered_map<uint32_t, uint32_t> bindingToIndexMap;
 };
 
 enum class SwapchainStatus
@@ -265,13 +265,10 @@ struct Swapchain
     uint32_t height = 0;
     uint32_t imageIndex = 0;
     uint32_t imageCount = 0;
-    VkAccessFlags2 accessMask = 0;
-    VkPipelineStageFlags2 stageMask = 0;
-    VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
     VkSwapchainKHR handle = VK_NULL_HANDLE;
     VkSurfaceKHR surface = VK_NULL_HANDLE;
-    VkSemaphore acquireSemaphore = VK_NULL_HANDLE;
-    VkSemaphore releaseSemaphore = VK_NULL_HANDLE;
+    VkSemaphore acquireSemaphores[RHI_MAX_FRAMES_IN_FLIGHT] = {};
+    VkSemaphore releaseSemaphores[RHI_MAX_FRAMES_IN_FLIGHT] = {};
     std::vector<VkImage> images;
 };
 
@@ -295,6 +292,7 @@ struct BufferBarrier
 struct ImageBarrier
 {
     Texture* texture = nullptr;
+    Swapchain* swapchain = nullptr;
     VkImageLayout oldLayout;
     VkImageLayout newLayout;
     VkPipelineStageFlags2 srcStage;
@@ -363,6 +361,9 @@ void CreateGraphicsPipeline(const GraphicsPipelineDesc& desc, Pipeline*& pipelin
 void CreateComputePipeline(const ComputePipelineDesc& desc, Pipeline*& pipeline);
 void DestroyPipeline(Pipeline* pipeline);
 
+void CreateRenderPass(const RenderPassDesc& desc, RenderPass*& renderPass);
+void DestroyRenderPass(RenderPass* renderPass);
+
 void CreateSwapchain(void* window, Swapchain*& swapchain);
 SwapchainStatus UpdateSwapchain(Swapchain* swapchain);
 void DestroySwapchain(Swapchain* swapchain);
@@ -371,16 +372,22 @@ CommandBuffer* RequestCommandBuffer();
 
 void CmdCopyBuffer(CommandBuffer* cmd, Buffer* src, Buffer* dst, VkBufferCopy range);
 void CmdUploadBuffer(CommandBuffer* cmd, Buffer* buffer, uint32_t size, uint32_t offset, void* data);
+void CmdCopyBufferToTexture(CommandBuffer* cmd, Buffer* src, Texture* dst, uint32_t srcOffset, const TextureRegion& region);
+void CmdUploadTexture(CommandBuffer* cmd, Texture* texture, const TextureRegion& region, void* data);
+void CmdCopyTexture(CommandBuffer* cmd, Texture* src, Texture* dst);
+void CmdCopyTextureToSwapchain(CommandBuffer* cmd, Texture* src, Swapchain* dst);
 
-void CmdBeginRendering(CommandBuffer* cmd, const RenderingInfo& renderingInfo);
-void CmdEndRendering(CommandBuffer* cmd);
+void CmdBeginRenderPass(CommandBuffer* cmd, RenderPass* renderPass);
+void CmdEndRenderPass(CommandBuffer* cmd);
 void CmdSetScissor(CommandBuffer* cmd, int32_t left, int32_t top, int32_t right, int32_t bottom);
 void CmdSetViewport(CommandBuffer* cmd, float x, float y, float w, float h, float minDepth = 0.0f, float maxDepth = 1.0f);
 
 void CmdBindPipeline(CommandBuffer* cmd, Pipeline* pipeline);
-void CmdBindTexture(CommandBuffer* cmd, uint32_t binding, Texture* texture, int view);
+void CmdBindTexture(CommandBuffer* cmd, uint32_t binding, Texture* texture, int view = 0);
 void CmdBindBuffer(CommandBuffer* cmd, uint32_t binding, Buffer* buffer, uint64_t size = 0, uint64_t offset = 0);
 void CmdBindSampler(CommandBuffer* cmd, uint32_t binding, Sampler* sampler);
+void CmdBindVertexBuffers(CommandBuffer* cmd, uint32_t firstBinding, uint32_t bindingCount, Buffer** buffers, uint64_t* offsets = nullptr);
+void CmdBindIndexBuffer(CommandBuffer* cmd, Buffer* buffer, uint64_t offset = 0, VkIndexType indexType = VK_INDEX_TYPE_UINT32);
 void CmdPushConstants(CommandBuffer* cmd, const void* data, uint32_t size);
 
 void CmdDraw(CommandBuffer* cmd, uint32_t vertexCount, uint32_t vertexOffset);
@@ -399,6 +406,9 @@ void CmdPipelineBarrier(CommandBuffer* cmd, ImageBarrier imageBarrier);
 void CmdEndPipelineBarrier(CommandBuffer* cmd);
 
 void Submit(CommandBuffer* cmd);
+
+void AcquireNextImage(Swapchain* swapchain);
+void Present(Swapchain* swapchain);
 
 void WaitIdle();
 void NextFrame();

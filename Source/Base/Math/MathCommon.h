@@ -1,10 +1,6 @@
 #pragma once
 
-#include <cmath>
-#include <glm/glm.hpp>
-#include <glm/gtx/euler_angles.hpp>
-#include <glm/gtx/matrix_decompose.hpp>
-#include <glm/gtx/quaternion.hpp>
+#include "PCH.h"
 
 #define PI 3.14159265359f
 #define TWO_PI 6.28318530718f

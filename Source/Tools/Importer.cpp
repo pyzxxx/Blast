@@ -5,9 +5,6 @@
 #include "Math/BoundingBox.h"
 #include "RHI/RHI.h"
 
-#include <set>
-#include <map>
-
 #define CGLTF_IMPLEMENTATION
 #include <cgltf.h>
 
@@ -89,6 +86,18 @@ VkPrimitiveTopology GetPrimitiveTopologyFromGltf(cgltf_primitive_type type)
     return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 }
 
+void CombindVertexData(uint8_t* dst, uint8_t* src, uint32_t vertexCount, uint32_t attributeSize, uint32_t offset, uint32_t stride)
+{
+    uint8_t* dstData = dst + offset;
+    uint8_t* srcData = src;
+    for (uint32_t i = 0; i < vertexCount; i++)
+    {
+        memcpy(dstData, srcData, attributeSize);
+        dstData += stride;
+        srcData += attributeSize;
+    }
+}
+
 void ImportGltf(const std::string& rawFilePath)
 {
     cgltf_options cgltfOptions = {static_cast<cgltf_file_type>(0)};
@@ -165,6 +174,8 @@ void ImportGltf(const std::string& rawFilePath)
         uint32_t totalSize = 0;
         JsonWriter writer;
         writer.Object([&]() {
+            writer.Field("binary", binPath);
+
             writer.Array("primitives", [&](){
                 for (int j = 0; j < cmesh->primitives_count; j++)
                 {
@@ -174,12 +185,8 @@ void ImportGltf(const std::string& rawFilePath)
                     uint32_t indexCount = 0;
                     uint32_t positionSize = 0;
                     uint32_t positionOffset = 0;
-                    uint32_t normalSize = 0;
-                    uint32_t normalOffset = 0;
-                    uint32_t tangentSize = 0;
-                    uint32_t tangentOffset = 0;
-                    uint32_t uv0Size = 0;
-                    uint32_t uv0Offset = 0;
+                    uint32_t attributeSize = 0;
+                    uint32_t attributeOffset = 0;
                     uint32_t indexSize = 0;
                     uint32_t indexOffset = 0;
                     bool using16uIndex = false;
@@ -194,32 +201,31 @@ void ImportGltf(const std::string& rawFilePath)
                     totalSize += positionSize;
                     binFile->Write(positionData, positionSize);
 
+                    cgltf_attribute* texcoordAttribute = GetGltfAttribute(cprimitive, cgltf_attribute_type_texcoord);
+                    cgltf_accessor* texcoordAccessor = texcoordAttribute->data;
+                    cgltf_buffer_view* texcoordView = texcoordAccessor->buffer_view;
+                    uint8_t* uvData = (uint8_t*)(texcoordView->buffer->data) + texcoordAccessor->offset + texcoordView->offset;
+
                     cgltf_attribute* normalAttribute = GetGltfAttribute(cprimitive, cgltf_attribute_type_normal);
                     cgltf_accessor* normalAccessor = normalAttribute->data;
                     cgltf_buffer_view* normalView = normalAccessor->buffer_view;
                     uint8_t* normalData = (uint8_t*)(normalView->buffer->data) + normalAccessor->offset + normalView->offset;
-                    normalSize = vertexCount * 3 * sizeof(float);
-                    normalOffset = totalSize;
-                    totalSize += normalSize;
-                    binFile->Write(normalData, normalSize);
 
                     cgltf_attribute* tangentAttribute = GetGltfAttribute(cprimitive, cgltf_attribute_type_tangent);
                     cgltf_accessor* tangentAccessor = tangentAttribute->data;
                     cgltf_buffer_view* tangentView = tangentAccessor->buffer_view;
                     uint8_t* tangentData = (uint8_t*)(tangentView->buffer->data) + tangentAccessor->offset + tangentView->offset;
-                    tangentSize = vertexCount * 3 * sizeof(float);
-                    tangentOffset = totalSize;
-                    totalSize += tangentSize;
-                    binFile->Write(tangentData, tangentSize);
 
-                    cgltf_attribute* texcoordAttribute = GetGltfAttribute(cprimitive, cgltf_attribute_type_texcoord);
-                    cgltf_accessor* texcoordAccessor = texcoordAttribute->data;
-                    cgltf_buffer_view* texcoordView = texcoordAccessor->buffer_view;
-                    uint8_t* uvData = (uint8_t*)(texcoordView->buffer->data) + texcoordAccessor->offset + texcoordView->offset;
-                    uv0Size = vertexCount * 2 * sizeof(float);
-                    uv0Offset = totalSize;
-                    totalSize += uv0Size;
-                    binFile->Write(uvData, uv0Size);
+                    uint32_t attributeStride = (2 + 3 + 3) * sizeof(float);
+                    attributeSize = vertexCount * attributeStride;
+                    attributeOffset = totalSize;
+                    totalSize += attributeSize;
+                    std::vector<uint8_t> attributeData(attributeSize);
+
+                    CombindVertexData(attributeData.data(), uvData, vertexCount, 2 * sizeof(float), 0, attributeStride);
+                    CombindVertexData(attributeData.data(), normalData, vertexCount, 3 * sizeof(float), 2 * sizeof(float), attributeStride);
+                    CombindVertexData(attributeData.data(), tangentData, vertexCount, 3 * sizeof(float), 5 * sizeof(float), attributeStride);
+                    binFile->Write(attributeData.data(), attributeData.size());
 
                     cgltf_accessor* indexAccessor = cprimitive->indices;
                     cgltf_buffer_view* indexBufferView = indexAccessor->buffer_view;
@@ -239,12 +245,8 @@ void ImportGltf(const std::string& rawFilePath)
 
                         writer.Field("positionOffset", positionOffset);
                         writer.Field("positionSize", positionSize);
-                        writer.Field("normalOffset", normalOffset);
-                        writer.Field("normalSize", normalSize);
-                        writer.Field("tangentOffset", tangentOffset);
-                        writer.Field("tangentSize", tangentSize);
-                        writer.Field("uv0Offset", uv0Offset);
-                        writer.Field("uv0Size", uv0Size);
+                        writer.Field("attributeOffset", attributeOffset);
+                        writer.Field("attributeSize", attributeSize);
 
                         writer.Field("indexOffset", indexOffset);
                         writer.Field("indexSize", indexSize);
@@ -266,6 +268,7 @@ void ImportGltf(const std::string& rawFilePath)
     std::vector<LevelNodeInfo> levelNodeInfos;
     levelNodeInfos.resize(cgltfData->nodes_count);
     std::set<std::string> uuids;
+    std::map<cgltf_node*, std::string> nodeHelper;
 
     for (size_t i = 0; i < cgltfData->nodes_count; ++i)
     {
@@ -284,6 +287,7 @@ void ImportGltf(const std::string& rawFilePath)
             }
         }
         levelNodeInfo.uuid = uuid;
+        nodeHelper[cnode] = uuid;
 
         glm::vec3 translation = glm::vec3(0.0f);
         if (cnode->has_translation)
@@ -335,6 +339,11 @@ void ImportGltf(const std::string& rawFilePath)
                             writer.Field("scale", levelNodeInfo.scale);
                             writer.Field("euler", levelNodeInfo.euler);
                             writer.Field("mesh", meshHelper[cnode->mesh]);
+
+                            if (cnode->parent)
+                            {
+                                writer.Field("parent", nodeHelper[cnode->parent]);
+                            }
                         });
                     }
                 }

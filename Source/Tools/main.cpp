@@ -1,8 +1,6 @@
 #include "Importer.h"
 #include "Foundation/FileSystem.h"
 
-#include <iostream>
-
 int main(int argc, char* argv[])
 {
     FS::Path::RegisterProtocol("asset", std::string(PROJECT_DIR) + "/Assets/");

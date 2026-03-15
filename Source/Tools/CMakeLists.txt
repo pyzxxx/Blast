@@ -6,6 +6,9 @@ target_include_directories(Tools PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(Tools PUBLIC Base)
 
+# Reuse precompiled header from Base
+target_precompile_headers(Tools REUSE_FROM Base)
+
 # cgltf
 add_library(cgltf INTERFACE)
 target_include_directories(cgltf INTERFACE ${EXTERN_DIR}/cgltf)

@@ -20,8 +20,8 @@ public:
 
     AABB(const glm::vec3& p1, const glm::vec3& p2)
     {
-        m_min = glm::vec3(glm::min(p1.x, p2.x), glm::min(p1.y, p2.y), glm::min(p1.z, p2.z));
-        m_max = glm::vec3(glm::max(p1.x, p2.x), glm::max(p1.y, p2.y), glm::max(p1.z, p2.z));
+        m_min = glm::min(p1, p2);
+        m_max = glm::max(p1, p2);
     }
 
     glm::vec3 GetMin() { return m_min; }

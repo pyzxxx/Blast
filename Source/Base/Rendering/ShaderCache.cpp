@@ -3,8 +3,6 @@
 #include "Foundation/Hash.h"
 #include "Foundation/FileSystem.h"
 
-std::unordered_map<std::size_t, RHI::Shader*> ShaderCache::m_shaderDict;
-
 void ShaderCache::Initialize()
 {
 }
@@ -18,13 +16,13 @@ void ShaderCache::Terminate()
     m_shaderDict.clear();
 }
 
-RHI::Shader* ShaderCache::Get(const std::string& path)
+RHI::Shader* ShaderCache::GetShader(const std::string& path)
 {
     std::vector<std::string> macros;
-    return Get(path, macros);
+    return GetShader(path, macros);
 }
 
-RHI::Shader* ShaderCache::Get(const std::string& path, const std::vector<std::string>& macros)
+RHI::Shader* ShaderCache::GetShader(const std::string& path, const std::vector<std::string>& macros)
 {
     std::size_t hash = 0;
     HashCombine(hash, path);
@@ -62,7 +60,7 @@ void ShaderCache::Compile(const std::string& path, const std::vector<std::string
 
     if (!FS::IsDirectory(binDir))
     {
-        FS::MakeDirectory(path);
+        FS::MakeDirectory(binDir);
     }
 
     std::string logFilePath = binDir + "/" + fileName + "Compile.log";
@@ -101,3 +99,5 @@ void ShaderCache::Compile(const std::string& path, const std::vector<std::string
     *data = nullptr;
     size = 0;
 }
+
+

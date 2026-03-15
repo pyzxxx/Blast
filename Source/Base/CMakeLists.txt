@@ -5,6 +5,9 @@ set(BASE_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 file(GLOB_RECURSE SOURCE_FILES "${BASE_ROOT_DIR}/*.h" "${BASE_ROOT_DIR}/*.cpp")
 add_library(Base STATIC ${SOURCE_FILES})
 
+# Precompiled Header
+target_precompile_headers(Base PRIVATE PCH.h)
+
 # glm
 target_include_directories(Base PUBLIC ${EXTERN_DIR}/glm)
 target_compile_definitions(Base PUBLIC

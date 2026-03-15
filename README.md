@@ -3,6 +3,7 @@
 - [cgltf](https://github.com/jkuhlmann/cgltf)
 - [glfw](https://github.com/glfw/glfw)
 - [glm](https://github.com/g-truc/glm)
+- [imgui](https://github.com/ocornut/imgui)
 - [rapidjson](https://github.com/Tencent/rapidjson)
 - [SPIRV-Reflect](https://github.com/KhronosGroup/SPIRV-Reflect)
 - [stb](https://github.com/nothings/stb)

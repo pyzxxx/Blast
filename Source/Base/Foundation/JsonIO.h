@@ -1,8 +1,7 @@
 #pragma once
 
-#pragma once
-
 #include "Math/BoundingBox.h"
+#include "FileSystem.h"
 
 #include <rapidjson/document.h>
 #include <rapidjson/prettywriter.h>
@@ -131,6 +130,16 @@ public:
     JsonReader(const char* buffer, uint32_t bufferSize)
     {
         m_dom.Parse(buffer, bufferSize);
+        m_current = &m_dom;
+    }
+
+    explicit JsonReader(const std::string& filePath)
+    {
+        std::shared_ptr<FS::File> jsonFile = std::shared_ptr<FS::File>(FS::File::Open(filePath, FS::FileMode::Read));
+        std::vector<uint8_t> jsonData(jsonFile->GetSize());
+        jsonFile->Read(jsonData.data(), jsonData.size());
+
+        m_dom.Parse((const char*)jsonData.data(), jsonData.size());
         m_current = &m_dom;
     }
 

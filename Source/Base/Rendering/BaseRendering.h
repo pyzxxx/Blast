@@ -1,18 +1,33 @@
 #pragma once
 
-#include <vector>
+#include "PCH.h"
+#include "RHI/RHI.h"
 
-class DrawList;
+class RenderContext;
 template<class T> class DrawListWapper;
+
+template<typename T>
+void ExecuteDrawCall(RHI::CommandBuffer* cmd, const T& drawCall)
+{
+}
+
+class DrawList
+{
+public:
+    virtual ~DrawList() = default;
+    virtual void Clear() = 0;
+    virtual void Execute(RHI::CommandBuffer* cmd) = 0;
+};
 
 class DrawListRegister
 {
 public:
-    template<typename T>
-    static DrawListWapper<T>* GetList()
+    static void ClearAll()
     {
-        static DrawListWapper<T> instance;
-        return &instance;
+        for (DrawList* list : GetAllLists())
+        {
+            list->Clear();
+        }
     }
 
     static void AddList(DrawList* list)
@@ -41,30 +56,15 @@ private:
     }
 };
 
-class DrawList
-{
-public:
-    virtual ~DrawList() = default;
-    virtual void Clear() = 0;
-};
-
 template<class T>
 class DrawListWapper : public DrawList
 {
 public:
-    DrawListWapper()
-    {
-        DrawListRegister::AddList(this);
-    }
+    using DrawCallType = T;
 
-    ~DrawListWapper() override
+    void Add(const T& drawCall)
     {
-        DrawListRegister::RemoveList(this);
-    }
-
-    void Add(const T& dc)
-    {
-        m_drawCalls.push_back(dc);
+        m_drawCalls.push_back(drawCall);
     }
 
     void Clear() override
@@ -72,8 +72,31 @@ public:
         m_drawCalls.clear();
     }
 
+    void Execute(RHI::CommandBuffer* cmd) override
+    {
+        for (const auto& drawCall : m_drawCalls)
+        {
+            ExecuteDrawCall(cmd, drawCall);
+        }
+    }
+
 private:
     std::vector<T> m_drawCalls;
 };
 
-#define REGISTER_DRAW_LIST(type) auto s_drawList##type = DrawListRegister::GetList<type>();
+#define DRAW_LIST_DECLARE(ListName, DrawCallType) \
+    struct ListName : public DrawListWapper<DrawCallType> \
+    { \
+        ListName(); \
+        ~ListName(); \
+        static ListName* Get(); \
+    };
+
+#define DRAW_LIST_IMPLEMENT(ListName, DrawCallType) \
+    ListName::ListName() { DrawListRegister::AddList(this); } \
+    ListName::~ListName() { DrawListRegister::RemoveList(this); } \
+    ListName* ListName::Get() \
+    { \
+        static ListName instance; \
+        return &instance; \
+    }

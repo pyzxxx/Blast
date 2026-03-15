@@ -5,3 +5,16 @@ add_executable(Runtime ${SOURCE_FILES})
 target_include_directories(Runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(Runtime PUBLIC Base)
+
+# glfw
+target_link_libraries(Runtime PUBLIC glfw)
+target_include_directories(Runtime PUBLIC ${EXTERN_DIR}/glfw/include)
+
+# imgui
+file(GLOB IMGUI_SOURCES "${EXTERN_DIR}/imgui/*.cpp")
+add_library(imgui STATIC ${IMGUI_SOURCES})
+target_include_directories(imgui PUBLIC ${EXTERN_DIR}/imgui)
+target_link_libraries(Runtime PUBLIC imgui)
+
+# Reuse precompiled header from Base
+target_precompile_headers(Runtime REUSE_FROM Base)
