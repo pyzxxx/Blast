@@ -1,13 +1,6 @@
 #pragma once
 
-#include <filesystem>
-#include <fstream>
-#include <functional>
-#include <map>
-#include <memory>
-#include <optional>
-#include <string>
-#include <vector>
+#include "PCH.h"
 
 namespace FS
 {
@@ -33,6 +26,7 @@ void DuplicateFile(const std::string& from, const std::string& to);
 void MakeDirectory(const std::string& path, bool recursive = true);
 bool RemoveFile(const std::string& path);
 bool RemoveDirectory(const std::string& path, bool recursive);
+std::vector<std::string> ListDirectory(const std::string& path, const std::string& extension = "", bool recursive = false);
 
 class Path
 {
@@ -41,6 +35,8 @@ public:
     static std::string FileName(const std::string& path);
     static std::string FullFileName(const std::string& path);
     static std::string ParentPath(const std::string& path);
+    static std::string ExecutablePath();
+    static std::string ExecutableDir();
 
     static void RegisterProtocol(const std::string& proto, const std::string& path);
     static std::string FixPath(const std::string& path);

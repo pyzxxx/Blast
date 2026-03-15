@@ -319,7 +319,7 @@ void ImportGltf(const std::string& rawFilePath)
     }
 
     {
-        std::string assetName = gltfFileName + ".json";
+        std::string assetName = gltfFileName + ".scene";
         std::string assetPath = FS::Path::Join("asset://", gltfFileName, assetName);
 
         JsonWriter writer;

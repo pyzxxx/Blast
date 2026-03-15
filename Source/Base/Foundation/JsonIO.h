@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PCH.h"
 #include "Math/BoundingBox.h"
 #include "FileSystem.h"
 
@@ -7,10 +8,6 @@
 #include <rapidjson/prettywriter.h>
 #include <rapidjson/rapidjson.h>
 #include <rapidjson/reader.h>
-
-#include <functional>
-#include <stack>
-#include <string>
 
 template<typename>
 constexpr bool kJsonFieldTypeUnsupported = false;

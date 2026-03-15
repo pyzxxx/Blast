@@ -11,6 +11,7 @@ void World::Initialize()
 
 void World::Terminate()
 {
+    UnloadScene();
 }
 
 void World::LoadScene(const std::string& scenePath)

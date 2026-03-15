@@ -1,6 +1,6 @@
 #pragma once
 
-#include <functional>
+#include "PCH.h"
 
 inline uint32_t Murmur3(const uint32_t* key, size_t wordCount, uint32_t seed) noexcept
 {

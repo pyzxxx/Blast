@@ -3,6 +3,7 @@
 #include <imgui.h>
 
 class GLFWwindow;
+class SceneSelectionPanel;
 
 class Window
 {
@@ -41,7 +42,8 @@ private:
     GLFWwindow* m_glfwWindow = nullptr;
     void* m_nativeHandle = nullptr;
     ImGuiContext* m_imguiContext = nullptr;
-    
+    std::unique_ptr<SceneSelectionPanel> m_scenePanel;
+
     uint32_t m_width;
     uint32_t m_height;
 };

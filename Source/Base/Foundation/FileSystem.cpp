@@ -1,6 +1,7 @@
 #include "FileSystem.h"
-
-#include <regex>
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 
 namespace FS
 {
@@ -49,6 +50,61 @@ bool RemoveDirectory(const std::string& path, bool recursive)
     }
 }
 
+std::vector<std::string> ListDirectory(const std::string& path, const std::string& extension, bool recursive)
+{
+    std::vector<std::string> files;
+
+    if (!IsDirectory(path))
+    {
+        return files;
+    }
+
+    if (recursive)
+    {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(path))
+        {
+            if (!entry.is_regular_file())
+            {
+                continue;
+            }
+
+            std::string ext = entry.path().extension().string();
+            if (extension.empty() || ext == extension)
+            {
+                std::filesystem::path relativePath = std::filesystem::relative(entry.path(), path);
+                files.push_back(relativePath.generic_string());
+            }
+        }
+    }
+    else
+    {
+        for (const auto& entry : std::filesystem::directory_iterator(path))
+        {
+            if (!entry.is_regular_file())
+            {
+                continue;
+            }
+
+            std::string filename = entry.path().filename().string();
+
+            if (extension.empty())
+            {
+                files.push_back(filename);
+            }
+            else
+            {
+                std::string ext = entry.path().extension().string();
+                if (ext == extension)
+                {
+                    files.push_back(filename);
+                }
+            }
+        }
+    }
+
+    return files;
+}
+
 std::string Path::Extension(const std::string& path)
 {
     return std::filesystem::path(path).extension().string();
@@ -67,6 +123,24 @@ std::string Path::FullFileName(const std::string& path)
 std::string Path::ParentPath(const std::string& path)
 {
     return std::filesystem::path(path).parent_path().string();
+}
+
+std::string Path::ExecutablePath()
+{
+    std::string path;
+#if defined(_WIN32)
+    char buffer[MAX_PATH];
+    DWORD len = GetModuleFileNameA(nullptr, buffer, MAX_PATH);
+    if (len > 0) path = buffer;
+#else
+    #error "Unsupported platform: ExecutablePath not implemented"
+#endif
+    return path;
+}
+
+std::string Path::ExecutableDir()
+{
+    return ParentPath(ExecutablePath());
 }
 
 std::map<std::string, std::string> Path::s_protocols;
