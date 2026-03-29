@@ -1,9 +1,9 @@
 #include "Importer.h"
-#include "Foundation/FileSystem.h"
+#include "Foundation/VFS.h"
 
 int main(int argc, char* argv[])
 {
-    FS::Path::RegisterProtocol("asset", std::string(PROJECT_DIR) + "/Assets/");
+    VFS::Mount("Assets", std::string(PROJECT_DIR) + "/Assets/");
 
     if (argc < 2)
     {

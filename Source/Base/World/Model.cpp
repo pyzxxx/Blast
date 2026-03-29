@@ -16,8 +16,9 @@ Model::~Model()
     scene->gpuScene.Remove(m_gpuSceneHandle);
 }
 
-void Model::Update()
+void Model::Update(float dt)
 {
+    (void)dt;
     Renderer* renderer = Renderer::Get();
     RenderScene* scene = renderer->GetScene();
     GpuSceneNode* node = scene->gpuScene.Get(m_gpuSceneHandle);
@@ -58,11 +59,11 @@ void ModelManager::DestroyModel(Model* model)
     m_pool.Remove(handle);
 }
 
-void ModelManager::Update()
+void ModelManager::Update(float dt)
 {
     for (uint32_t i = 0; i < m_pool.Size(); i++)
     {
-        m_pool[i].Update();
+        m_pool[i].Update(dt);
     }
 }
 

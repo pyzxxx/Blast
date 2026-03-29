@@ -1,8 +1,11 @@
 #include "Window.h"
+#include "Panel.h"
 #include "SceneSelectionPanel.h"
+#include "CameraPanel.h"
 #include "Input/Input.h"
 #include "Input/InputKey.h"
 #include "Input/InputMouseButton.h"
+#include "Foundation/Log.h"
 
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3.h>
@@ -139,8 +142,10 @@ static InputMouseButton ConvertGLFWToInputMouseButton(int glfwButton)
 Window::Window(uint32_t width, uint32_t height, const char* title)
     : m_width(width)
     , m_height(height)
-    , m_scenePanel(std::make_unique<SceneSelectionPanel>())
 {
+    m_panels.push_back(std::make_unique<SceneSelectionPanel>());
+    m_panels.push_back(std::make_unique<CameraPanel>());
+
     m_glfwWindow = glfwCreateWindow(width, height, title, nullptr, nullptr);
     m_nativeHandle = glfwGetWin32Window(m_glfwWindow);
     glfwSetWindowUserPointer(m_glfwWindow, this);
@@ -222,8 +227,12 @@ void Window::NewFrame(float dt)
     {
         io.MouseDown[i] = glfwGetMouseButton(m_glfwWindow, i) != 0;
     }
+
     double mouse_x, mouse_y;
     glfwGetCursorPos(m_glfwWindow, &mouse_x, &mouse_y);
+
+    Input::Get()->SetMousePosition(static_cast<float>(mouse_x), static_cast<float>(mouse_y));
+
     io.MousePos = ImVec2((float)mouse_x, (float)mouse_y);
     ImGui::NewFrame();
     DrawUI();
@@ -297,8 +306,23 @@ void Window::ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 
 void Window::DrawUI()
 {
-    if (m_scenePanel)
+    ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(400, 500), ImGuiCond_FirstUseEver);
+
+    if (ImGui::Begin("Tools", nullptr))
     {
-        m_scenePanel->Draw();
+        if (ImGui::BeginTabBar("Panels"))
+        {
+            for (size_t i = 0; i < m_panels.size(); ++i)
+            {
+                if (ImGui::BeginTabItem(m_panels[i]->GetName()))
+                {
+                    m_panels[i]->DrawContent();
+                    ImGui::EndTabItem();
+                }
+            }
+            ImGui::EndTabBar();
+        }
     }
+    ImGui::End();
 }

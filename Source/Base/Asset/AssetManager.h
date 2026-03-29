@@ -35,7 +35,7 @@ public:
             return (T*)GetAsset(assetPath);
         }
 
-        T* asset = create<T>(assetPath);
+        T* asset = Create<T>(assetPath);
         return asset;
     }
 

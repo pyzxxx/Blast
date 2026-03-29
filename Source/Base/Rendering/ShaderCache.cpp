@@ -1,6 +1,7 @@
 #include "ShaderCache.h"
 
 #include "Foundation/Hash.h"
+#include "Foundation/VFS.h"
 #include "Foundation/FileSystem.h"
 
 void ShaderCache::Initialize()
@@ -54,17 +55,18 @@ RHI::Shader* ShaderCache::GetShader(const std::string& path, const std::vector<s
 
 void ShaderCache::Compile(const std::string& path, const std::vector<std::string>& macros, void** data, uint32_t& size)
 {
-    std::string fileName = FS::Path::FileName(path);
-    std::string parentPath = FS::Path::ParentPath(path);
-    std::string binDir = parentPath + "/bin";
+    std::string fileName = VFS::FullFileName(path);
+    std::string parentPath = VFS::ParentPath(path);
+    std::string realPath = VFS::GetRealPath(path);
+    std::string binDir = VFS::Join(parentPath, "bin");
 
-    if (!FS::IsDirectory(binDir))
+    if (!VFS::IsDirectory(binDir))
     {
-        FS::MakeDirectory(binDir);
+        VFS::MakeDirectory(binDir);
     }
 
-    std::string logFilePath = binDir + "/" + fileName + "Compile.log";
-    std::string outFilePath = binDir + "/" + fileName + ".spv";
+    std::string logFilePath = VFS::GetRealPath(VFS::Join(binDir, fileName + "Compile.log"));
+    std::string outFilePath = VFS::GetRealPath(VFS::Join(binDir, fileName + ".spv"));
 
     std::string glslangValidator = getenv("VULKAN_SDK");
     glslangValidator += "/Bin/glslangValidator";
@@ -73,7 +75,7 @@ void ShaderCache::Compile(const std::string& path, const std::vector<std::string
     commandLine += glslangValidator;
 
     char buff[256];
-    sprintf(buff, R"( -V "%s" --target-env vulkan1.3 -o "%s")", path.c_str(), outFilePath.c_str());
+    sprintf(buff, R"( -V "%s" --target-env vulkan1.3 -o "%s")", realPath.c_str(), outFilePath.c_str());
     commandLine += buff;
 
     for (const auto& macro : macros)

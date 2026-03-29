@@ -143,24 +143,6 @@ std::string Path::ExecutableDir()
     return ParentPath(ExecutablePath());
 }
 
-std::map<std::string, std::string> Path::s_protocols;
-void Path::RegisterProtocol(const std::string& proto, const std::string& path)
-{
-    s_protocols[proto + "://"] = path;
-}
-
-std::string Path::FixPath(const std::string& path)
-{
-    for (auto& proto : s_protocols)
-    {
-        if (path.find(proto.first) != std::string::npos)
-        {
-            return std::regex_replace(path, std::regex(proto.first), proto.second);
-        }
-    }
-    return path;
-}
-
 File* File::Open(const std::string& path, FileMode mode, FileError* error)
 {
     auto file = new File();

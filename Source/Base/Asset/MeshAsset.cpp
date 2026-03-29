@@ -1,15 +1,16 @@
 #include "MeshAsset.h"
 #include "Foundation/FileSystem.h"
 #include "Foundation/JsonIO.h"
+#include "Foundation/VFS.h"
 
 MeshAsset::MeshAsset(const std::string& assetPath)
     : Asset(assetPath)
 {
-    JsonReader reader(FS::Path::FixPath(assetPath));
+    JsonReader reader(assetPath);
 
     std::string binPath;
     reader.Field("binary", binPath);
-    std::shared_ptr<FS::File> binFile = std::shared_ptr<FS::File>(FS::File::Open(FS::Path::FixPath(binPath), FS::FileMode::Read));
+    std::shared_ptr<FS::File> binFile = std::shared_ptr<FS::File>(VFS::Open(binPath, FS::FileMode::Read));
     std::vector<uint8_t> binData(binFile->GetSize());
     binFile->Read(binData.data(), binData.size());
 
@@ -36,6 +37,9 @@ MeshAsset::MeshAsset(const std::string& assetPath)
         reader.Field("indexSize", indexSize);
 
         Primitive primitive;
+        primitive.vertexCount = vertexCount;
+        primitive.indexCount = indexCount;
+        primitive.indexType = using16uIndex ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
 
         RHI::BufferDesc bufferDesc = {};
         bufferDesc.size = positionSize;

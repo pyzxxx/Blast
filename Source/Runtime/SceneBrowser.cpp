@@ -1,5 +1,5 @@
 #include "SceneBrowser.h"
-#include "Foundation/FileSystem.h"
+#include "Foundation/VFS.h"
 
 SceneBrowser& SceneBrowser::Get()
 {
@@ -10,26 +10,36 @@ SceneBrowser& SceneBrowser::Get()
 std::vector<std::string> SceneBrowser::GetAvailableScenes()
 {
     std::vector<std::string> scenes;
+    const std::string sceneDir = "Assets/Scene";
 
-    std::string realPath = FS::Path::FixPath(s_sceneDirectory);
-    if (!FS::IsDirectory(realPath))
+    if (!VFS::IsDirectory(sceneDir))
     {
         return scenes;
     }
 
-    for (const auto& entry : std::filesystem::directory_iterator(realPath))
+    std::vector<std::string> entries = VFS::ListDirectory(sceneDir);
+    for (const auto& entry : entries)
     {
-        if (!entry.is_directory())
+        std::string fullPath = VFS::Join(sceneDir, entry);
+        if (!VFS::IsDirectory(fullPath))
         {
             continue;
         }
 
-        std::string dirName = entry.path().filename().string();
-        std::string sceneFile = FS::Path::Join(s_sceneDirectory, dirName, dirName + s_sceneExtension);
-        
-        if (FS::IsFile(FS::Path::FixPath(sceneFile)))
+        std::vector<std::string> sceneFiles = VFS::ListDirectory(fullPath);
+        bool hasSceneFile = false;
+        for (const auto& file : sceneFiles)
         {
-            scenes.push_back(dirName);
+            if (VFS::Extension(file) == ".scene")
+            {
+                hasSceneFile = true;
+                break;
+            }
+        }
+
+        if (hasSceneFile)
+        {
+            scenes.push_back(entry);
         }
     }
 

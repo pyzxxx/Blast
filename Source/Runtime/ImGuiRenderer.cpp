@@ -72,13 +72,12 @@ void ImGuiRenderer::Setup(RenderContext* ctx, RHI::CommandBuffer* cmd)
 
     RHI::RenderPassDesc renderPassDesc = {};
     renderPassDesc.colors[0].texture = output;
-    renderPassDesc.colors[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    renderPassDesc.colors[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
     renderPassDesc.colors[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    renderPassDesc.colors[0].clearValue = {0.0f, 0.0f, 0.0f, 1.0f};
     RHI::RenderPass* renderPass = ctx->CreateRenderPass("imguiRenderPass", renderPassDesc);
 
-    RHI::Shader* vertexShader = ShaderCache::Get()->GetShader(FS::Path::FixPath("asset://Shader/Imgui.vert"));
-    RHI::Shader* fragmentShader = ShaderCache::Get()->GetShader(FS::Path::FixPath("asset://Shader/Imgui.frag"));
+    RHI::Shader* vertexShader = ShaderCache::Get()->GetShader("Assets/Shader/Imgui.vert");
+    RHI::Shader* fragmentShader = ShaderCache::Get()->GetShader("Assets/Shader/Imgui.frag");
 
     RHI::GraphicsPipelineDesc desc = {};
     desc.vertexShader = vertexShader;

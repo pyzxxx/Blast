@@ -1,12 +1,15 @@
 #pragma once
 
-class SceneSelectionPanel
+#include "Panel.h"
+
+class SceneSelectionPanel : public Panel
 {
 public:
     SceneSelectionPanel();
     ~SceneSelectionPanel() = default;
 
-    void Draw();
+    const char* GetName() const override { return "Scene Selection"; }
+    void DrawContent() override;
 
 private:
     void RefreshSceneList();

@@ -29,15 +29,18 @@ void Input::Terminate()
     m_previousButtonState.fill(false);
 }
 
-void Input::Update()
+void Input::Update(float dt)
 {
     m_previousKeyState = m_currentKeyState;
     m_previousButtonState = m_currentButtonState;
 
-    m_previousMouseX = m_mouseX;
-    m_previousMouseY = m_mouseY;
-    m_mouseDeltaX = m_mouseX - m_previousMouseX;
-    m_mouseDeltaY = m_mouseY - m_previousMouseY;
+    if (!m_cursorLocked)
+    {
+        m_mouseDeltaX = m_mouseX - m_previousMouseX;
+        m_mouseDeltaY = m_mouseY - m_previousMouseY;
+        m_previousMouseX = m_mouseX;
+        m_previousMouseY = m_mouseY;
+    }
 
     m_scrollDeltaX = 0.0f;
     m_scrollDeltaY = 0.0f;
@@ -86,6 +89,16 @@ void Input::SetMousePosition(float x, float y)
 {
     m_mouseX = x;
     m_mouseY = y;
+}
+
+void Input::SetMouseDeltaDirect(float x, float y)
+{
+    m_mouseDeltaX = x;
+    m_mouseDeltaY = y;
+    m_mouseX = 0.0f;
+    m_mouseY = 0.0f;
+    m_previousMouseX = 0.0f;
+    m_previousMouseY = 0.0f;
 }
 
 void Input::SetMouseButtonState(InputMouseButton button, bool pressed)

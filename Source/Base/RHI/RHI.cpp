@@ -127,19 +127,19 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugUtilsMessengerCB(VkDebugUtilsMessageSeverity
 {
     if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
     {
-        LOGW("Validation Verbose %s: %s\n", callbackData->pMessageIdName, callbackData->pMessage);
+        LOGW("Validation Verbose %s: %s", callbackData->pMessageIdName, callbackData->pMessage);
     }
     else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
     {
-        LOGW("Validation Info %s: %s\n", callbackData->pMessageIdName, callbackData->pMessage);
+        LOGW("Validation Info %s: %s", callbackData->pMessageIdName, callbackData->pMessage);
     }
     else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
     {
-        LOGW("Validation Warning %s: %s\n", callbackData->pMessageIdName, callbackData->pMessage);
+        LOGW("Validation Warning %s: %s", callbackData->pMessageIdName, callbackData->pMessage);
     }
     else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
     {
-        LOGE("Validation Error %s: %s\n", callbackData->pMessageIdName, callbackData->pMessage);
+        LOGE("Validation Error %s: %s", callbackData->pMessageIdName, callbackData->pMessage);
     }
     return VK_FALSE;
 }
@@ -429,12 +429,12 @@ void Startup()
     {
         VkPhysicalDeviceProperties props;
         vkGetPhysicalDeviceProperties(gpu, &props);
-        LOGI("Found Vulkan GPU: %s\n", props.deviceName);
-        LOGI("API: %u.%u.%u\n",
+        LOGI("Found Vulkan GPU: %s", props.deviceName);
+        LOGI("API: %u.%u.%u",
              VK_VERSION_MAJOR(props.apiVersion),
              VK_VERSION_MINOR(props.apiVersion),
              VK_VERSION_PATCH(props.apiVersion));
-        LOGI("Driver: %u.%u.%u\n",
+        LOGI("Driver: %u.%u.%u",
              VK_VERSION_MAJOR(props.driverVersion),
              VK_VERSION_MINOR(props.driverVersion),
              VK_VERSION_PATCH(props.driverVersion));

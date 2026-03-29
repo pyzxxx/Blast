@@ -26,7 +26,10 @@ public:
     RHI::RenderPass* GetRenderPass(const std::string& name);
     RHI::RenderPass* CreateRenderPass(const std::string& name, const RHI::RenderPassDesc& desc);
 
+    RHI::Sampler* GetSampler(const std::string& name) const;
+
 private:
+    void InitializeSamplers();
     friend class Renderer;
 
     uint32_t m_width = 0;
@@ -44,4 +47,6 @@ private:
 
     std::unordered_map<std::string, RHI::RenderPass*> m_renderPassCache;
     std::unordered_map<std::string, RHI::RenderPassDesc> m_renderPassDescCache;
+
+    std::unordered_map<std::string, RHI::Sampler*> m_samplerCache;
 };

@@ -3,23 +3,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define LOGE(...)                                 \
+#define LOGE(...)                                  \
+    do                                             \
+    {                                              \
+        fprintf(stderr, "[ERROR]: " __VA_ARGS__);  \
+        fprintf(stderr, "\n");                     \
+        fflush(stderr);                            \
+    } while (false)
+
+#define LOGW(...)                                 \
     do                                            \
     {                                             \
-        fprintf(stderr, "[ERROR]: " __VA_ARGS__); \
+        fprintf(stderr, "[WARN]: " __VA_ARGS__);  \
+        fprintf(stderr, "\n");                    \
         fflush(stderr);                           \
     } while (false)
 
-#define LOGW(...)                                \
-    do                                           \
-    {                                            \
-        fprintf(stderr, "[WARN]: " __VA_ARGS__); \
-        fflush(stderr);                          \
-    } while (false)
-
-#define LOGI(...)                                \
-    do                                           \
-    {                                            \
-        fprintf(stderr, "[INFO]: " __VA_ARGS__); \
-        fflush(stderr);                          \
+#define LOGI(...)                                 \
+    do                                            \
+    {                                             \
+        fprintf(stderr, "[INFO]: " __VA_ARGS__);  \
+        fprintf(stderr, "\n");                    \
+        fflush(stderr);                           \
     } while (false)

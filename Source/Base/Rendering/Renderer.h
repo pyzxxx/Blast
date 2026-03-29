@@ -7,14 +7,25 @@
 #include "RHI/RHI.h"
 #include "Foundation/Module.h"
 
+struct PerFrameData
+{
+    glm::mat4 view;
+    glm::mat4 projection;
+    glm::mat4 viewProjection;
+    glm::mat4 inverseView;
+    glm::mat4 inverseProjection;
+    glm::vec4 cameraPosition;
+    glm::vec4 pad[3];
+};
+
 class Renderer : public Module<Renderer>
 {
 public:
     void Initialize() override;
     void Terminate() override;
-    
+
     void SetWindow(void* nativeHandle);
-    
+
     void Render();
 
     void AddExtension(RenderExtension* extension);
@@ -40,4 +51,5 @@ private:
     std::vector<RenderExtension*> m_extensions;
 
     OpacityPass* m_opacityPass = nullptr;
+    CompositePass* m_compositePass = nullptr;
 };

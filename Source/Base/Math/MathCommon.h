@@ -11,6 +11,6 @@
 
 enum class ClockDirection : uint8_t
 {
-    CW, // Clockwise
-    CCW // CounterClockwise
+    CW,
+    CCW
 };

@@ -3,6 +3,7 @@
 
 RenderContext::RenderContext()
 {
+    InitializeSamplers();
 }
 
 RenderContext::~RenderContext()
@@ -41,6 +42,12 @@ RenderContext::~RenderContext()
     }
     m_renderPassCache.clear();
     m_renderPassDescCache.clear();
+
+    for (auto& iter : m_samplerCache)
+    {
+        RHI::DestroySampler(iter.second);
+    }
+    m_samplerCache.clear();
 }
 
 RHI::Buffer* RenderContext::GetBuffer(const std::string& name)
@@ -313,4 +320,34 @@ RHI::RenderPass* RenderContext::CreateRenderPass(const std::string& name, const 
         m_renderPassDescCache[name] = desc;
     }
     return renderPass;
+}
+
+void RenderContext::InitializeSamplers()
+{
+    auto createSampler = [&](const std::string& name, VkFilter filter, VkSamplerAddressMode addressMode) {
+        RHI::EzSamplerDesc desc = {};
+        desc.magFilter = filter;
+        desc.minFilter = filter;
+        desc.addressU = addressMode;
+        desc.addressV = addressMode;
+        desc.addressW = addressMode;
+        RHI::Sampler* sampler = nullptr;
+        RHI::CreateSampler(desc, sampler);
+        m_samplerCache[name] = sampler;
+    };
+
+    createSampler("linearWrap", VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+    createSampler("linearClamp", VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+    createSampler("nearestWrap", VK_FILTER_NEAREST, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+    createSampler("nearestClamp", VK_FILTER_NEAREST, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+}
+
+RHI::Sampler* RenderContext::GetSampler(const std::string& name) const
+{
+    auto iter = m_samplerCache.find(name);
+    if (iter != m_samplerCache.end())
+    {
+        return iter->second;
+    }
+    return nullptr;
 }

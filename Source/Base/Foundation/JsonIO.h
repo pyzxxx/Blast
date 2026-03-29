@@ -3,6 +3,8 @@
 #include "PCH.h"
 #include "Math/BoundingBox.h"
 #include "FileSystem.h"
+#include "VFS.h"
+#include "Log.h"
 
 #include <rapidjson/document.h>
 #include <rapidjson/prettywriter.h>
@@ -132,7 +134,13 @@ public:
 
     explicit JsonReader(const std::string& filePath)
     {
-        std::shared_ptr<FS::File> jsonFile = std::shared_ptr<FS::File>(FS::File::Open(filePath, FS::FileMode::Read));
+        std::shared_ptr<FS::File> jsonFile = std::shared_ptr<FS::File>(VFS::Open(filePath, FS::FileMode::Read));
+        if (!jsonFile)
+        {
+            LOGE("JsonReader: Failed to open file: %s", filePath.c_str());
+            m_current = nullptr;
+            return;
+        }
         std::vector<uint8_t> jsonData(jsonFile->GetSize());
         jsonFile->Read(jsonData.data(), jsonData.size());
 

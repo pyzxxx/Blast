@@ -8,7 +8,7 @@ public:
     virtual ~ModuleBase() = default;
     virtual void Initialize() {}
     virtual void Terminate() {}
-    virtual void Update() {}
+    virtual void Update(float dt) {}
 };
 
 struct ModuleNode
@@ -78,13 +78,13 @@ public:
         }
     }
 
-    void UpdateAll()
+    void UpdateAll(float dt)
     {
         assert(m_initialized && "InitializeAll() must be called before UpdateAll()");
-        
+
         for (auto& node : m_updateOrder)
         {
-            node.module->Update();
+            node.module->Update(dt);
         }
     }
 

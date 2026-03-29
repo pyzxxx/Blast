@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 class SceneBrowser
 {
@@ -13,7 +14,7 @@ public:
     const std::string& GetCurrentScene() const;
 
 private:
-    static constexpr const char* s_sceneDirectory = "asset://Scene";
+    static constexpr const char* s_sceneDirectory = "Assets/Scene";
     static constexpr const char* s_sceneExtension = ".scene";
 
     std::string m_currentScene;

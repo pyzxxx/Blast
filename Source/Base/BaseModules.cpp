@@ -10,25 +10,31 @@
 #include "Rendering/Renderer.h"
 #include "World/World.h"
 #include "World/Model.h"
+#include "World/Camera.h"
 
 void RegisterBaseModules()
 {
     MODULE(RHIModule);
 
     MODULE(Input)
-        ORDER(-1000);
+        ORDER(1000);
 
-    MODULE(AssetManager);
+    MODULE(AssetManager)
+        DEPENDS(RHIModule);
 
     MODULE(ShaderCache)
         DEPENDS(RHIModule);
-    
+
     MODULE(Renderer)
         DEPENDS(ShaderCache)
         DEPENDS(RHIModule);
 
-    MODULE(World)
-        DEPENDS(Renderer);
-
     MODULE(ModelManager);
+
+    MODULE(CameraManager)
+        ORDER(-100);
+
+    MODULE(World)
+        DEPENDS(Renderer)
+        DEPENDS(CameraManager);
 }

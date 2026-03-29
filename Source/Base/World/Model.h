@@ -12,7 +12,7 @@ public:
     Model();
     ~Model() override;
 
-    void Update();
+    void Update(float dt);
 
 public:
     MeshAsset* meshAsset = nullptr;
@@ -30,7 +30,7 @@ public:
     Model* CreateModel();
     void DestroyModel(Model* model);
 
-    void Update();
+    void Update(float dt);
 
 private:
     ObjectPool<Model> m_pool;

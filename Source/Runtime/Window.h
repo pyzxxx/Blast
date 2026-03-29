@@ -1,9 +1,11 @@
 #pragma once
 
 #include <imgui.h>
+#include <memory>
+#include <vector>
 
 class GLFWwindow;
-class SceneSelectionPanel;
+class Panel;
 
 class Window
 {
@@ -14,12 +16,12 @@ public:
     bool ShouldClose() const;
     void PollEvents();
     double GetTime() const;
-    
+
     void NewFrame(float dt);
-    
+
     void* GetNativeHandle() const { return m_nativeHandle; }
     ImGuiContext* GetImGuiContext() const { return m_imguiContext; }
-    
+
     uint32_t GetWidth() const { return m_width; }
     uint32_t GetHeight() const { return m_height; }
 
@@ -31,7 +33,7 @@ protected:
 
 private:
     void InitializeImGui();
-    
+
     static void WindowSizeCallback(GLFWwindow* window, int width, int height);
     static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
     static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
@@ -42,7 +44,7 @@ private:
     GLFWwindow* m_glfwWindow = nullptr;
     void* m_nativeHandle = nullptr;
     ImGuiContext* m_imguiContext = nullptr;
-    std::unique_ptr<SceneSelectionPanel> m_scenePanel;
+    std::vector<std::unique_ptr<Panel>> m_panels;
 
     uint32_t m_width;
     uint32_t m_height;

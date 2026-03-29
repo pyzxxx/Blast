@@ -9,7 +9,7 @@ class Input : public Module<Input>
 public:
     void Initialize() override;
     void Terminate() override;
-    void Update() override;
+    void Update(float dt) override;
 
     void SetKeyState(InputKey key, bool pressed);
     bool IsKeyHeld(InputKey key);
@@ -17,6 +17,7 @@ public:
     bool IsKeyReleased(InputKey key);
 
     void SetMousePosition(float x, float y);
+    void SetMouseDeltaDirect(float x, float y);
     void SetMouseButtonState(InputMouseButton button, bool pressed);
     void SetScrollDelta(float x, float y);
 

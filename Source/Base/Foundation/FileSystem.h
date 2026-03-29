@@ -38,9 +38,6 @@ public:
     static std::string ExecutablePath();
     static std::string ExecutableDir();
 
-    static void RegisterProtocol(const std::string& proto, const std::string& path);
-    static std::string FixPath(const std::string& path);
-
     template<typename... Args>
     static std::string Join(Args&&... parts)
     {
@@ -48,9 +45,6 @@ public:
         ((result /= std::forward<Args>(parts)), ...);
         return result.generic_string();
     }
-
-private:
-    static std::map<std::string, std::string> s_protocols;
 };
 
 class File

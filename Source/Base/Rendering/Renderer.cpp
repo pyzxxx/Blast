@@ -5,6 +5,7 @@ void Renderer::Initialize()
     m_ctx = new RenderContext();
     m_scene = new RenderScene();
     m_opacityPass = new OpacityPass();
+    m_compositePass = new CompositePass();
 }
 
 void Renderer::Terminate()
@@ -14,7 +15,8 @@ void Renderer::Terminate()
         RHI::DestroySwapchain(m_swapchain);
         m_swapchain = nullptr;
     }
-    
+
+    delete m_compositePass;
     delete m_opacityPass;
     delete m_scene;
     delete m_ctx;
@@ -27,7 +29,7 @@ void Renderer::SetWindow(void* nativeHandle)
         RHI::DestroySwapchain(m_swapchain);
         m_swapchain = nullptr;
     }
-    
+
     RHI::CreateSwapchain(nativeHandle, m_swapchain);
     m_ctx->m_width = 0;
     m_ctx->m_height = 0;
@@ -99,12 +101,44 @@ void Renderer::Setup(RHI::CommandBuffer* cmd)
         RHI::CmdPipelineBarrier(cmd, barrier);
     });
 
+    m_scene->Setup(m_ctx, cmd);
+
     m_opacityPass->Setup(m_ctx, cmd);
+    m_compositePass->Setup(m_ctx, cmd);
 
     for (auto* ext : m_extensions)
     {
         ext->Setup(m_ctx, cmd);
     }
+
+    const RenderView& primaryView = m_scene->GetPrimaryView();
+
+    PerFrameData perFrameData = {};
+    perFrameData.view = primaryView.viewMatrix;
+    perFrameData.projection = primaryView.projectionMatrix;
+    perFrameData.viewProjection = primaryView.viewProjection;
+    perFrameData.inverseView = primaryView.inverseView;
+    perFrameData.inverseProjection = primaryView.inverseProjection;
+    perFrameData.cameraPosition = glm::vec4(primaryView.cameraPosition, 1.0f);
+
+    RHI::BufferDesc perFrameDesc = {};
+    perFrameDesc.bufferUsage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    perFrameDesc.memoryUsage = VMA_MEMORY_USAGE_CPU_ONLY;
+    perFrameDesc.size = sizeof(PerFrameData);
+    perFrameDesc.dynamicBuffer = true;
+    RHI::Buffer* perFrameBuffer = m_ctx->CreateBuffer("perFrame", perFrameDesc);
+
+    void* perFrameMap = RHI::MapMemory(perFrameBuffer);
+    memcpy(perFrameMap, &perFrameData, sizeof(PerFrameData));
+    RHI::UnmapMemory(perFrameBuffer);
+
+    RHI::BufferBarrier perFrameBarrier = {};
+    perFrameBarrier.buffer = perFrameBuffer;
+    perFrameBarrier.srcStage = VK_PIPELINE_STAGE_HOST_BIT;
+    perFrameBarrier.srcAccess = VK_ACCESS_HOST_WRITE_BIT;
+    perFrameBarrier.dstStage = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    perFrameBarrier.dstAccess = VK_ACCESS_UNIFORM_READ_BIT;
+    RHI::CmdPipelineBarrier(cmd, perFrameBarrier);
 }
 
 void Renderer::Execute(RHI::CommandBuffer* cmd)
@@ -112,6 +146,7 @@ void Renderer::Execute(RHI::CommandBuffer* cmd)
     RHI::Texture* output = m_ctx->GetTexture("output");
 
     m_opacityPass->Execute(m_ctx, cmd);
+    m_compositePass->Execute(m_ctx, cmd);
 
     for (auto* ext : m_extensions)
     {

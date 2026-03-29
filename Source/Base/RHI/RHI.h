@@ -20,7 +20,7 @@
     {                                                             \
         if (x != VK_SUCCESS)                                      \
         {                                                         \
-            LOGE("Vulkan error at %s:%d.\n", __FILE__, __LINE__); \
+            LOGE("Vulkan error at %s:%d.", __FILE__, __LINE__); \
             abort();                                              \
         }                                                         \
     } while (0)

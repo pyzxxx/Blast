@@ -1,5 +1,5 @@
 #include "Importer.h"
-#include "Foundation/FileSystem.h"
+#include "Foundation/VFS.h"
 #include "Foundation/JsonIO.h"
 #include "Foundation/UUID.h"
 #include "Math/BoundingBox.h"
@@ -100,28 +100,36 @@ void CombindVertexData(uint8_t* dst, uint8_t* src, uint32_t vertexCount, uint32_
 
 void ImportGltf(const std::string& rawFilePath)
 {
+    LOGI("Importing: %s", rawFilePath.c_str());
+
     cgltf_options cgltfOptions = {static_cast<cgltf_file_type>(0)};
     cgltf_data* cgltfData = nullptr;
     if (cgltf_parse_file(&cgltfOptions, rawFilePath.c_str(), &cgltfData) != cgltf_result_success)
     {
+        LOGE("Failed to parse gltf file: %s", rawFilePath.c_str());
         cgltf_free(cgltfData);
         return;
     }
 
     if (cgltf_load_buffers(&cgltfOptions, cgltfData, rawFilePath.c_str()) != cgltf_result_success)
     {
+        LOGE("Failed to load gltf buffers: %s", rawFilePath.c_str());
         cgltf_free(cgltfData);
         return;
     }
 
     if (cgltf_validate(cgltfData) != cgltf_result_success)
     {
+        LOGE("Failed to validate gltf: %s", rawFilePath.c_str());
         cgltf_free(cgltfData);
         return;
     }
 
+    LOGI("Gltf loaded successfully: %zu meshes, %zu images", (size_t)cgltfData->meshes_count, (size_t)cgltfData->images_count);
+
     std::string parentPath = FS::Path::ParentPath(rawFilePath);
     std::string gltfFileName = FS::Path::FileName(rawFilePath);
+    LOGI("Output directory: Assets/Scene/%s", gltfFileName.c_str());
 
     // Load gltf images
     std::map<cgltf_image*, std::string> imageHelper;
@@ -130,18 +138,18 @@ void ImportGltf(const std::string& rawFilePath)
         cgltf_image* cimage = &cgltfData->images[i];
         std::string imageName = FS::Path::FullFileName(cimage->uri);
         std::string assetName = imageName + ".json";
-        std::string assetPath = FS::Path::Join("asset://", gltfFileName, assetName);
+        std::string assetPath = VFS::Join("Assets", "Scene", gltfFileName, assetName);
         std::string rawImagePath = parentPath + "/" + cimage->uri;
-        std::string outImagePath = FS::Path::Join("asset://", gltfFileName, imageName);
+        std::string outImagePath = VFS::Join("Assets", "Scene", gltfFileName, imageName);
 
-        FS::DuplicateFile(rawFilePath, FS::Path::FixPath(outImagePath));
+        FS::DuplicateFile(rawImagePath, VFS::GetRealPath(outImagePath));
 
         JsonWriter writer;
         writer.Object([&]() {
             writer.Field("uri", imageName);
         });
 
-        std::shared_ptr<FS::File> jsonFile = std::shared_ptr<FS::File>(FS::File::Open(FS::Path::FixPath(assetPath), FS::FileMode::Write));
+        std::shared_ptr<FS::File> jsonFile = std::shared_ptr<FS::File>(VFS::Open(assetPath, FS::FileMode::Write));
         jsonFile->Write((uint8_t*)writer.GetString(), writer.GetSize());
 
         imageHelper[cimage] = assetPath;
@@ -157,19 +165,33 @@ void ImportGltf(const std::string& rawFilePath)
 
     // Load gltf meshs
     std::map<cgltf_mesh*, std::string> meshHelper;
+    LOGI("Processing %zu meshes...", (size_t)cgltfData->meshes_count);
     for (int i = 0; i < cgltfData->meshes_count; ++i)
     {
         cgltf_mesh* cmesh = &cgltfData->meshes[i];
         std::string meshName = cmesh->name;
         std::string binName = meshName + ".bin";
         std::string assetName = meshName + ".json";
-        std::string binPath = FS::Path::Join("asset://", gltfFileName, binName);
-        std::string assetPath = FS::Path::Join("asset://", gltfFileName, assetName);
+        std::string binPath = VFS::Join("Assets", "Scene", gltfFileName, binName);
+        std::string assetPath = VFS::Join("Assets", "Scene", gltfFileName, assetName);
+
+        LOGI("Mesh %d: %s -> %s", i, meshName.c_str(), assetPath.c_str());
 
         meshHelper[cmesh] = assetPath;
 
-        std::shared_ptr<FS::File> binFile = std::shared_ptr<FS::File>(FS::File::Open(FS::Path::FixPath(binPath), FS::FileMode::Write));
-        std::shared_ptr<FS::File> jsonFile = std::shared_ptr<FS::File>(FS::File::Open(FS::Path::FixPath(assetPath), FS::FileMode::Write));
+        std::shared_ptr<FS::File> binFile = std::shared_ptr<FS::File>(VFS::Open(binPath, FS::FileMode::Write));
+        std::shared_ptr<FS::File> jsonFile = std::shared_ptr<FS::File>(VFS::Open(assetPath, FS::FileMode::Write));
+
+        if (!binFile || !binFile->IsOpen())
+        {
+            LOGE("Failed to open bin file: %s", binPath.c_str());
+            continue;
+        }
+        if (!jsonFile || !jsonFile->IsOpen())
+        {
+            LOGE("Failed to open json file: %s", assetPath.c_str());
+            continue;
+        }
 
         uint32_t totalSize = 0;
         JsonWriter writer;
@@ -320,7 +342,8 @@ void ImportGltf(const std::string& rawFilePath)
 
     {
         std::string assetName = gltfFileName + ".scene";
-        std::string assetPath = FS::Path::Join("asset://", gltfFileName, assetName);
+        std::string assetPath = VFS::Join("Assets", "Scene", gltfFileName, assetName);
+        LOGI("Writing scene file: %s", assetPath.c_str());
 
         JsonWriter writer;
         writer.Object([&]() {
@@ -350,14 +373,24 @@ void ImportGltf(const std::string& rawFilePath)
             });
         });
 
-        std::shared_ptr<FS::File> jsonFile = std::shared_ptr<FS::File>(FS::File::Open(FS::Path::FixPath(assetPath), FS::FileMode::Write));
-        jsonFile->Write((uint8_t*)writer.GetString(), writer.GetSize());
+        std::shared_ptr<FS::File> jsonFile = std::shared_ptr<FS::File>(VFS::Open(assetPath, FS::FileMode::Write));
+        if (!jsonFile || !jsonFile->IsOpen())
+        {
+            LOGE("Failed to open scene file: %s", assetPath.c_str());
+        }
+        else
+        {
+            jsonFile->Write((uint8_t*)writer.GetString(), writer.GetSize());
+            LOGI("Scene file saved: %s (%zu bytes)", assetPath.c_str(), writer.GetSize());
+        }
     }
+
+    LOGI("Import completed: %s", gltfFileName.c_str());
 }
 
 void ImportAsset(const std::string& rawFilePath)
 {
-    std::string ext = FS::Path::Extension(rawFilePath);
+    std::string ext = VFS::Extension(rawFilePath);
 
     if (ext == ".gltf")
     {

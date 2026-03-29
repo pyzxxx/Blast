@@ -3,7 +3,7 @@
 #include "UserSettings.h"
 #include "World/World.h"
 #include "Foundation/Log.h"
-#include "Foundation/FileSystem.h"
+#include "Foundation/VFS.h"
 #include <imgui.h>
 
 SceneSelectionPanel::SceneSelectionPanel()
@@ -13,11 +13,8 @@ SceneSelectionPanel::SceneSelectionPanel()
     RefreshSceneList();
 }
 
-void SceneSelectionPanel::Draw()
+void SceneSelectionPanel::DrawContent()
 {
-    ImGui::SetNextWindowSize(ImVec2(350, 450), ImGuiCond_Always);
-    ImGui::Begin("Scene Selection", nullptr, ImGuiWindowFlags_NoResize);
-
     if (m_needsRefresh)
     {
         RefreshSceneList();
@@ -88,8 +85,6 @@ void SceneSelectionPanel::Draw()
             m_needsRefresh = true;
         }
     }
-
-    ImGui::End();
 }
 
 void SceneSelectionPanel::RefreshSceneList()
@@ -118,12 +113,12 @@ void SceneSelectionPanel::LoadSelectedScene()
     }
 
     std::string sceneName = m_availableScenes[m_selectedSceneIndex];
-    std::string scenePath = FS::Path::Join("asset://Scene", sceneName, sceneName + ".scene");
+    std::string sceneDir = VFS::Join("Assets/Scene", sceneName);
 
-    World::Get()->LoadScene(scenePath);
+    World::Get()->Load(sceneDir);
     SceneBrowser::Get().SetCurrentScene(sceneName);
     UserSettings::Get().SetSelectedScene(sceneName);
-    LOGI("SceneSelectionPanel: Loaded scene '%s'", sceneName.c_str());
+    LOGI("SceneSelectionPanel: Loaded scene directory '%s'", sceneName.c_str());
 }
 
 void SceneSelectionPanel::ReloadCurrentScene()
@@ -134,8 +129,8 @@ void SceneSelectionPanel::ReloadCurrentScene()
         return;
     }
 
-    std::string scenePath = FS::Path::Join("asset://Scene", currentScene, currentScene + ".scene");
-    World::Get()->UnloadScene();
-    World::Get()->LoadScene(scenePath);
-    LOGI("SceneSelectionPanel: Reloaded scene '%s'", currentScene.c_str());
+    std::string sceneDir = VFS::Join("Assets/Scene", currentScene);
+    World::Get()->Unload();
+    World::Get()->Load(sceneDir);
+    LOGI("SceneSelectionPanel: Reloaded scene directory '%s'", currentScene.c_str());
 }
