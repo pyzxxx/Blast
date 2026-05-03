@@ -1,22 +1,11 @@
 #pragma once
 
-#include "Passes.h"
-#include "RenderContext.h"
-#include "RenderScene.h"
-#include "RenderExtension.h"
-#include "RHI/RHI.h"
 #include "Foundation/Module.h"
-
-struct PerFrameData
-{
-    glm::mat4 view;
-    glm::mat4 projection;
-    glm::mat4 viewProjection;
-    glm::mat4 inverseView;
-    glm::mat4 inverseProjection;
-    glm::vec4 cameraPosition;
-    glm::vec4 pad[3];
-};
+#include "Passes.h"
+#include "RHI/RHI.h"
+#include "RenderContext.h"
+#include "RenderExtension.h"
+#include "RenderScene.h"
 
 class Renderer : public Module<Renderer>
 {
@@ -50,6 +39,9 @@ private:
     RHI::Swapchain* m_swapchain = nullptr;
     std::vector<RenderExtension*> m_extensions;
 
+    LightClusterPass* m_lightClusterPass = nullptr;
     OpacityPass* m_opacityPass = nullptr;
+    AlphaPass* m_alphaPass = nullptr;
     CompositePass* m_compositePass = nullptr;
+    BVHDebugPass* m_bvhDebugPass = nullptr;
 };

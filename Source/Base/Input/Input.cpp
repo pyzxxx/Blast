@@ -116,30 +116,32 @@ void Input::SetScrollDelta(float x, float y)
     m_scrollDeltaY += y;
 }
 
-float Input::GetMousePositionX()
-{
-    return m_mouseX;
-}
+float Input::GetMousePositionX() { return m_mouseX; }
 
-float Input::GetMousePositionY()
-{
-    return m_mouseY;
-}
+float Input::GetMousePositionY() { return m_mouseY; }
 
 void Input::GetMousePosition(float* x, float* y)
 {
     if (x)
+    {
         *x = m_mouseX;
+    }
     if (y)
+    {
         *y = m_mouseY;
+    }
 }
 
 void Input::GetMouseDelta(float* x, float* y)
 {
     if (x)
+    {
         *x = m_mouseDeltaX;
+    }
     if (y)
+    {
         *y = m_mouseDeltaY;
+    }
 }
 
 bool Input::IsMouseButtonHeld(InputMouseButton button)
@@ -175,27 +177,19 @@ bool Input::IsMouseButtonReleased(InputMouseButton button)
 void Input::GetScrollDelta(float* x, float* y)
 {
     if (x)
+    {
         *x = m_scrollDeltaX;
+    }
     if (y)
+    {
         *y = m_scrollDeltaY;
+    }
 }
 
-void Input::SetCursorVisible(bool visible)
-{
-    m_cursorVisible = visible;
-}
+void Input::SetCursorVisible(bool visible) { m_cursorVisible = visible; }
 
-void Input::SetCursorLocked(bool locked)
-{
-    m_cursorLocked = locked;
-}
+void Input::SetCursorLocked(bool locked) { m_cursorLocked = locked; }
 
-bool Input::IsCursorVisible()
-{
-    return m_cursorVisible;
-}
+bool Input::IsCursorVisible() { return m_cursorVisible; }
 
-bool Input::IsCursorLocked()
-{
-    return m_cursorLocked;
-}
+bool Input::IsCursorLocked() { return m_cursorLocked; }

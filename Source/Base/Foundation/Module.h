@@ -28,7 +28,8 @@ public:
         return s_instance;
     }
 
-    void Register(const std::string& name, ModuleBase* module, const std::vector<std::string>& deps, int32_t updateOrder)
+    void Register(const std::string& name, ModuleBase* module, const std::vector<std::string>& deps,
+                  int32_t updateOrder)
     {
         ModuleNode node;
         node.name = name;
@@ -45,7 +46,7 @@ public:
         {
             m_initOrder = TopologicalSort();
             m_updateOrder = m_nodes;
-            
+
             for (size_t i = 0; i < m_updateOrder.size(); ++i)
             {
                 for (size_t j = i + 1; j < m_updateOrder.size(); ++j)
@@ -58,10 +59,10 @@ public:
                     }
                 }
             }
-            
+
             m_initialized = true;
         }
-        
+
         for (auto& node : m_initOrder)
         {
             node.module->Initialize();
@@ -71,7 +72,7 @@ public:
     void TerminateAll()
     {
         assert(m_initialized && "InitializeAll() must be called before TerminateAll()");
-        
+
         for (int32_t i = static_cast<int32_t>(m_initOrder.size()) - 1; i >= 0; --i)
         {
             m_initOrder[i].module->Terminate();
@@ -109,6 +110,7 @@ private:
         {
             for (auto& dep : node.dependencies)
             {
+                assert(m_nameToIndex.find(dep) != m_nameToIndex.end() && "Dependency module not found");
                 graph[dep].insert(node.name);
                 inDegree[node.name]++;
             }
@@ -169,27 +171,24 @@ struct ModuleBuilder
     ModuleBase* module;
     std::vector<std::string> deps;
     int32_t order = 0;
-    
+
     ModuleBuilder(const std::string& n, ModuleBase* m) : name(n), module(m) {}
-    
-    ~ModuleBuilder()
+
+    ~ModuleBuilder() { ModuleRegistry::Get().Register(name, module, deps, order); }
+
+    ModuleBuilder& Depends(const std::string& dep)
     {
-        ModuleRegistry::Get().Register(name, module, deps, order);
+        deps.push_back(dep);
+        return *this;
     }
-    
-    ModuleBuilder& Depends(const std::string& dep) 
-    { 
-        deps.push_back(dep); 
-        return *this; 
-    }
-    
-    ModuleBuilder& UpdateOrder(int32_t o) 
-    { 
-        order = o; 
-        return *this; 
+
+    ModuleBuilder& UpdateOrder(int32_t o)
+    {
+        order = o;
+        return *this;
     }
 };
 
-#define MODULE(Class)       ModuleBuilder(#Class, Class::Get())
-#define DEPENDS(Dep)        .Depends(#Dep)
-#define ORDER(Val)          .UpdateOrder(Val)
+#define MODULE(Class) ModuleBuilder(#Class, Class::Get())
+#define DEPENDS(Dep) .Depends(#Dep)
+#define ORDER(Val) .UpdateOrder(Val)

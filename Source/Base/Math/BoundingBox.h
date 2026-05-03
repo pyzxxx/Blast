@@ -32,15 +32,9 @@ public:
 
     void SetMax(const glm::vec3& p) { m_max = p; }
 
-    glm::vec3 GetCenter() const
-    {
-        return (m_max + m_min) * 0.5f;
-    }
+    glm::vec3 GetCenter() const { return (m_max + m_min) * 0.5f; }
 
-    glm::vec3 GetSize() const
-    {
-        return (m_max - m_min);
-    }
+    glm::vec3 GetSize() const { return (m_max - m_min); }
 
     float GetSurfaceArea() const
     {

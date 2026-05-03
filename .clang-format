@@ -9,14 +9,16 @@ AllowAllParametersOfDeclarationOnNextLine: false
 AllowShortBlocksOnASingleLine: Always
 AllowShortCaseLabelsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: All
-AllowShortIfStatementsOnASingleLine: Always
+AllowShortIfStatementsOnASingleLine: false
 AllowShortLambdasOnASingleLine: All
-AllowShortLoopsOnASingleLine: true
+AllowShortLoopsOnASingleLine: false
 AlwaysBreakAfterReturnType: None
 AlwaysBreakTemplateDeclarations: Yes
 BreakBeforeBraces: Custom
 BraceWrapping:
   AfterClass: true
+  AfterStruct: true
+  AfterEnum: true
   AfterFunction: true
   AfterControlStatement: true
   BeforeElse: true
@@ -30,6 +32,7 @@ CompactNamespaces: false
 ContinuationIndentWidth: 4
 IndentCaseLabels: true
 IndentPPDirectives: None
+InsertBraces: true
 IndentWidth: 4
 TabWidth: 4
 KeepEmptyLinesAtTheStartOfBlocks: true

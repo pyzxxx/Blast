@@ -6,7 +6,8 @@ inline uint32_t Murmur3(const uint32_t* key, size_t wordCount, uint32_t seed) no
 {
     uint32_t h = seed;
     size_t i = wordCount;
-    do {
+    do
+    {
         uint32_t k = *key++;
         k *= 0xcc9e2d51u;
         k = (k << 15u) | (k >> 17u);

@@ -1,10 +1,10 @@
 #pragma once
 
-#include "PCH.h"
-#include "Math/BoundingBox.h"
 #include "FileSystem.h"
-#include "VFS.h"
 #include "Log.h"
+#include "Math/BoundingBox.h"
+#include "PCH.h"
+#include "VFS.h"
 
 #include <rapidjson/document.h>
 #include <rapidjson/prettywriter.h>
@@ -42,10 +42,7 @@ public:
         m_writer->EndArray();
     }
 
-    void Key(const char* key)
-    {
-        m_writer->Key(key);
-    }
+    void Key(const char* key) { m_writer->Key(key); }
 
     template<typename T>
     void Field(const char* key, T val)
@@ -59,17 +56,30 @@ public:
     {
         using ValueType = std::remove_cv_t<std::remove_reference_t<T>>;
 
-        if constexpr (std::is_integral_v<ValueType>) m_writer->Int(val);
+        if constexpr (std::is_integral_v<ValueType>)
+        {
+            m_writer->Int(val);
+        }
         else if constexpr (std::is_same_v<ValueType, float>)
+        {
             m_writer->Double(val);
+        }
         else if constexpr (std::is_same_v<ValueType, double>)
+        {
             m_writer->Double(val);
+        }
         else if constexpr (std::is_same_v<ValueType, bool>)
+        {
             m_writer->Bool(val);
+        }
         else if constexpr (std::is_same_v<ValueType, std::string>)
+        {
             m_writer->String(val.c_str());
+        }
         else if constexpr (std::is_same_v<ValueType, const char*>)
+        {
             m_writer->String(val);
+        }
         else if constexpr (std::is_same_v<ValueType, glm::vec2>)
         {
             m_writer->StartArray();
@@ -148,10 +158,7 @@ public:
         m_current = &m_dom;
     }
 
-    bool HasMember(const char* key) const
-    {
-        return m_current->HasMember(key);
-    }
+    bool HasMember(const char* key) const { return m_current->HasMember(key); }
 
     void Object(const char* key, std::function<void()> func)
     {
@@ -263,7 +270,8 @@ public:
         {
             if (value.IsArray())
             {
-                out_value = glm::vec4(value[0].GetDouble(), value[1].GetDouble(), value[2].GetDouble(), value[3].GetDouble());
+                out_value =
+                    glm::vec4(value[0].GetDouble(), value[1].GetDouble(), value[2].GetDouble(), value[3].GetDouble());
                 return true;
             }
         }

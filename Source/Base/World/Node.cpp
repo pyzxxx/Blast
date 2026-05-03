@@ -19,7 +19,9 @@ void Node::SetParent(Node* newParent)
     Node* oldParent = m_parent;
 
     if (oldParent == newParent)
+    {
         return;
+    }
 
     if (oldParent)
     {
@@ -80,15 +82,9 @@ void Node::SetLocalTransform(const glm::mat4& localTransform)
     UpdateTransform();
 }
 
-glm::mat4 Node::GetLocalTransform()
-{
-    return m_localTransform;
-}
+glm::mat4 Node::GetLocalTransform() { return m_localTransform; }
 
-glm::mat4 Node::GetWorldTransform()
-{
-    return m_worldTransform;
-}
+glm::mat4 Node::GetWorldTransform() { return m_worldTransform; }
 
 glm::vec3 Node::GetWorldRight()
 {
@@ -119,6 +115,8 @@ void Node::UpdateTransform()
     {
         m_worldTransform = m_parent->m_worldTransform * m_localTransform;
     }
+
+    DirtyTransform();
 
     for (auto& child : m_childrens)
     {

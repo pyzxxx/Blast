@@ -8,8 +8,15 @@
 #define RHI_MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define RHI_MIN(a, b) (((a) < (b)) ? (a) : (b))
 
-namespace RHI
-{
+namespace RHI {
+constexpr uint32_t BindlessTextureCount = 4096;
+constexpr uint32_t BindlessTexture3DCount = 512;
+constexpr uint32_t BindlessStorageTextureCount = 4096;
+constexpr uint32_t BindlessSamplerCount = 4096;
+constexpr uint32_t BindlessStorageBufferCount = 4096;
+
+void FreeSamplerBindlessIndex(uint32_t index);
+
 struct StageBufferPool
 {
     uint64_t size = 0;
@@ -40,16 +47,21 @@ struct Context
     VkPhysicalDeviceVulkan11Properties properties_1_1 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES};
     VkPhysicalDeviceVulkan12Properties properties_1_2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES};
     VkPhysicalDeviceVulkan13Properties properties_1_3 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES};
-    VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationStructureProperties = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR};
-    VkPhysicalDeviceRayTracingPipelinePropertiesKHR raytracingProperties = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR};
+    VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationStructureProperties = {
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR};
+    VkPhysicalDeviceRayTracingPipelinePropertiesKHR raytracingProperties = {
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR};
 
     VkPhysicalDeviceFeatures2KHR features2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR};
     VkPhysicalDeviceVulkan11Features features_1_1 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES};
     VkPhysicalDeviceVulkan12Features features_1_2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
     VkPhysicalDeviceVulkan13Features features_1_3 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
-    VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR};
-    VkPhysicalDeviceRayTracingPipelineFeaturesKHR raytracingFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR};
-    VkPhysicalDeviceRayQueryFeaturesKHR raytracingQueryFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR};
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures = {
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR};
+    VkPhysicalDeviceRayTracingPipelineFeaturesKHR raytracingFeatures = {
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR};
+    VkPhysicalDeviceRayQueryFeaturesKHR raytracingQueryFeatures = {
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR};
 
     VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
 
@@ -59,6 +71,28 @@ struct Context
 
     // Present state
     std::vector<Swapchain*> presentSwapchains;
+
+    // Bindless state
+    VkDescriptorSetLayout bindlessLayout = VK_NULL_HANDLE;
+    VkDescriptorSet bindlessSet = VK_NULL_HANDLE;
+    VkDescriptorPool bindlessPool = VK_NULL_HANDLE;
+
+    std::vector<uint32_t> textureFreeList;
+    std::vector<uint32_t> texture3DFreeList;
+    std::vector<uint32_t> storageTextureFreeList;
+    std::vector<uint32_t> samplerFreeList;
+    std::vector<uint32_t> bufferFreeList;
+
+    Texture* dummyTexture = nullptr;
+    Texture* dummyTexture3D = nullptr;
+    Texture* dummyStorageTexture = nullptr;
+    Sampler* dummySampler = nullptr;
+    Buffer* dummyBuffer = nullptr;
+    uint32_t dummyTextureIndex = 0;
+    uint32_t dummyTexture3DIndex = 0;
+    uint32_t dummyStorageTextureIndex = 0;
+    uint32_t dummySamplerIndex = 0;
+    uint32_t dummyBufferIndex = 0;
 } s_ctx;
 
 struct ResourceManager
@@ -121,9 +155,9 @@ static bool IsExtensionSupported(const char* required, const std::vector<VkExten
 
 #ifdef VK_DEBUG
 VKAPI_ATTR VkBool32 VKAPI_CALL debugUtilsMessengerCB(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-                                                        VkDebugUtilsMessageTypeFlagsEXT messageType,
-                                                        const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
-                                                        void* userData)
+                                                     VkDebugUtilsMessageTypeFlagsEXT messageType,
+                                                     const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
+                                                     void* userData)
 {
     if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
     {
@@ -161,8 +195,7 @@ void UpdateResourceMgr(uint64_t currentFrameCount, uint8_t maxFramesInFlight)
 {
     s_resMgr.frameCount = currentFrameCount;
 
-    auto processDestroyQueue = [&](auto& queue, auto destroyFunc)
-    {
+    auto processDestroyQueue = [&](auto& queue, auto destroyFunc) {
         while (!queue.empty())
         {
             if (queue.front().second + maxFramesInFlight < s_resMgr.frameCount)
@@ -179,94 +212,634 @@ void UpdateResourceMgr(uint64_t currentFrameCount, uint8_t maxFramesInFlight)
     };
 
     processDestroyQueue(s_resMgr.destroyerImages,
-                        [&](const auto& item)
-                        {
-                            vmaDestroyImage(s_ctx.allocator, item.first, item.second);
-                        });
+                        [&](const auto& item) { vmaDestroyImage(s_ctx.allocator, item.first, item.second); });
 
     processDestroyQueue(s_resMgr.destroyerImageViews,
-                        [&](VkImageView imageView)
-                        {
-                            vkDestroyImageView(s_ctx.device, imageView, nullptr);
-                        });
+                        [&](VkImageView imageView) { vkDestroyImageView(s_ctx.device, imageView, nullptr); });
 
     processDestroyQueue(s_resMgr.destroyerBuffers,
-                        [&](const auto& item)
-                        {
-                            vmaDestroyBuffer(s_ctx.allocator, item.first, item.second);
-                        });
+                        [&](const auto& item) { vmaDestroyBuffer(s_ctx.allocator, item.first, item.second); });
 
     processDestroyQueue(s_resMgr.destroyerSamplers,
-                        [&](VkSampler sampler)
-                        {
-                            vkDestroySampler(s_ctx.device, sampler, nullptr);
-                        });
+                        [&](VkSampler sampler) { vkDestroySampler(s_ctx.device, sampler, nullptr); });
 
     processDestroyQueue(s_resMgr.destroyerDescriptorPools,
-                        [&](VkDescriptorPool pool)
-                        {
-                            vkDestroyDescriptorPool(s_ctx.device, pool, nullptr);
-                        });
+                        [&](VkDescriptorPool pool) { vkDestroyDescriptorPool(s_ctx.device, pool, nullptr); });
 
-    processDestroyQueue(s_resMgr.destroyerDescriptorSetLayouts,
-                        [&](VkDescriptorSetLayout layout)
-                        {
-                            vkDestroyDescriptorSetLayout(s_ctx.device, layout, nullptr);
-                        });
+    processDestroyQueue(s_resMgr.destroyerDescriptorSetLayouts, [&](VkDescriptorSetLayout layout) {
+        vkDestroyDescriptorSetLayout(s_ctx.device, layout, nullptr);
+    });
 
-    processDestroyQueue(s_resMgr.destroyerDescriptorUpdateTemplates,
-                        [&](VkDescriptorUpdateTemplate template_)
-                        {
-                            vkDestroyDescriptorUpdateTemplate(s_ctx.device, template_, nullptr);
-                        });
+    processDestroyQueue(s_resMgr.destroyerDescriptorUpdateTemplates, [&](VkDescriptorUpdateTemplate template_) {
+        vkDestroyDescriptorUpdateTemplate(s_ctx.device, template_, nullptr);
+    });
 
-    processDestroyQueue(s_resMgr.destroyerShaderModules,
-                        [&](VkShaderModule shaderModule)
-                        {
-                            vkDestroyShaderModule(s_ctx.device, shaderModule, nullptr);
-                        });
+    processDestroyQueue(s_resMgr.destroyerShaderModules, [&](VkShaderModule shaderModule) {
+        vkDestroyShaderModule(s_ctx.device, shaderModule, nullptr);
+    });
 
-    processDestroyQueue(s_resMgr.destroyerPipelineLayouts,
-                        [&](VkPipelineLayout pipelineLayout)
-                        {
-                            vkDestroyPipelineLayout(s_ctx.device, pipelineLayout, nullptr);
-                        });
+    processDestroyQueue(s_resMgr.destroyerPipelineLayouts, [&](VkPipelineLayout pipelineLayout) {
+        vkDestroyPipelineLayout(s_ctx.device, pipelineLayout, nullptr);
+    });
 
     processDestroyQueue(s_resMgr.destroyerPipelines,
-                        [&](VkPipeline pipeline)
-                        {
-                            vkDestroyPipeline(s_ctx.device, pipeline, nullptr);
-                        });
+                        [&](VkPipeline pipeline) { vkDestroyPipeline(s_ctx.device, pipeline, nullptr); });
 
     processDestroyQueue(s_resMgr.destroyerQueryPools,
-                        [&](VkQueryPool queryPool)
-                        {
-                            vkDestroyQueryPool(s_ctx.device, queryPool, nullptr);
-                        });
+                        [&](VkQueryPool queryPool) { vkDestroyQueryPool(s_ctx.device, queryPool, nullptr); });
 
     processDestroyQueue(s_resMgr.destroyerAccelerationStructures,
-                        [&](VkAccelerationStructureKHR accelerationStructure)
-                        {
+                        [&](VkAccelerationStructureKHR accelerationStructure) {
                             vkDestroyAccelerationStructureKHR(s_ctx.device, accelerationStructure, nullptr);
                         });
 
     processDestroyQueue(s_resMgr.destroyerSwapchains,
-                        [&](VkSwapchainKHR swapchain)
-                        {
-                            vkDestroySwapchainKHR(s_ctx.device, swapchain, nullptr);
-                        });
+                        [&](VkSwapchainKHR swapchain) { vkDestroySwapchainKHR(s_ctx.device, swapchain, nullptr); });
 
     processDestroyQueue(s_resMgr.destroyerSemaphores,
-                        [&](VkSemaphore semaphore)
-                        {
-                            vkDestroySemaphore(s_ctx.device, semaphore, nullptr);
-                        });
+                        [&](VkSemaphore semaphore) { vkDestroySemaphore(s_ctx.device, semaphore, nullptr); });
 
     processDestroyQueue(s_resMgr.destroyerSurfaces,
-                        [&](VkSurfaceKHR surface)
-                        {
-                            vkDestroySurfaceKHR(s_ctx.instance, surface, nullptr);
-                        });
+                        [&](VkSurfaceKHR surface) { vkDestroySurfaceKHR(s_ctx.instance, surface, nullptr); });
+}
+
+void InitBindlessRegistry()
+{
+    VkDescriptorSetLayoutBinding bindings[5] = {};
+    bindings[0].binding = 0;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    bindings[0].descriptorCount = BindlessTextureCount;
+    bindings[0].stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT;
+
+    bindings[1].binding = 1;
+    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    bindings[1].descriptorCount = BindlessSamplerCount;
+    bindings[1].stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT;
+
+    bindings[2].binding = 2;
+    bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    bindings[2].descriptorCount = BindlessStorageTextureCount;
+    bindings[2].stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT;
+
+    bindings[3].binding = 3;
+    bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    bindings[3].descriptorCount = BindlessTexture3DCount;
+    bindings[3].stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT;
+
+    bindings[4].binding = 4;
+    bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    bindings[4].descriptorCount = BindlessStorageBufferCount;
+    bindings[4].stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT;
+
+    VkDescriptorBindingFlags bindingFlags[5] = {};
+    bindingFlags[0] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+    bindingFlags[1] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+    bindingFlags[2] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+    bindingFlags[3] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+    bindingFlags[4] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+
+    VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo = {};
+    bindingFlagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+    bindingFlagsInfo.bindingCount = 5;
+    bindingFlagsInfo.pBindingFlags = bindingFlags;
+
+    VkDescriptorSetLayoutCreateInfo layoutCreateInfo = {};
+    layoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutCreateInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+    layoutCreateInfo.bindingCount = 5;
+    layoutCreateInfo.pBindings = bindings;
+    layoutCreateInfo.pNext = &bindingFlagsInfo;
+    VK_ASSERT(vkCreateDescriptorSetLayout(s_ctx.device, &layoutCreateInfo, nullptr, &s_ctx.bindlessLayout));
+
+    VkDescriptorPoolSize poolSizes[5] = {};
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    poolSizes[0].descriptorCount = BindlessTextureCount;
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_SAMPLER;
+    poolSizes[1].descriptorCount = BindlessSamplerCount;
+    poolSizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    poolSizes[2].descriptorCount = BindlessStorageTextureCount;
+    poolSizes[3].type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    poolSizes[3].descriptorCount = BindlessTexture3DCount;
+    poolSizes[4].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    poolSizes[4].descriptorCount = BindlessStorageBufferCount;
+
+    VkDescriptorPoolCreateInfo poolCreateInfo = {};
+    poolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolCreateInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+    poolCreateInfo.maxSets = 1;
+    poolCreateInfo.poolSizeCount = 5;
+    poolCreateInfo.pPoolSizes = poolSizes;
+    VK_ASSERT(vkCreateDescriptorPool(s_ctx.device, &poolCreateInfo, nullptr, &s_ctx.bindlessPool));
+
+    VkDescriptorSetAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = s_ctx.bindlessPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &s_ctx.bindlessLayout;
+    VK_ASSERT(vkAllocateDescriptorSets(s_ctx.device, &allocInfo, &s_ctx.bindlessSet));
+
+    s_ctx.textureFreeList.reserve(BindlessTextureCount);
+    for (uint32_t i = BindlessTextureCount - 1; i != 0xFFFFFFFF; --i)
+    {
+        s_ctx.textureFreeList.push_back(i);
+    }
+
+    s_ctx.storageTextureFreeList.reserve(BindlessStorageTextureCount);
+    for (uint32_t i = BindlessStorageTextureCount - 1; i != 0xFFFFFFFF; --i)
+    {
+        s_ctx.storageTextureFreeList.push_back(i);
+    }
+
+    s_ctx.texture3DFreeList.reserve(BindlessTexture3DCount);
+    for (uint32_t i = BindlessTexture3DCount - 1; i != 0xFFFFFFFF; --i)
+    {
+        s_ctx.texture3DFreeList.push_back(i);
+    }
+
+    s_ctx.samplerFreeList.reserve(BindlessSamplerCount);
+    for (uint32_t i = BindlessSamplerCount - 1; i != 0xFFFFFFFF; --i)
+    {
+        s_ctx.samplerFreeList.push_back(i);
+    }
+
+    s_ctx.bufferFreeList.reserve(BindlessStorageBufferCount);
+    for (uint32_t i = BindlessStorageBufferCount - 1; i != 0xFFFFFFFF; --i)
+    {
+        s_ctx.bufferFreeList.push_back(i);
+    }
+
+    BufferDesc dummyBufferDesc = {};
+    dummyBufferDesc.size = 16;
+    dummyBufferDesc.bufferUsage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    dummyBufferDesc.memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY;
+    CreateBuffer(dummyBufferDesc, s_ctx.dummyBuffer);
+    s_ctx.dummyBufferIndex = s_ctx.bufferFreeList.back();
+    s_ctx.bufferFreeList.pop_back();
+    s_ctx.dummyBuffer->bindlessIndexStorage = s_ctx.dummyBufferIndex;
+
+    VkDescriptorBufferInfo dummyBufferInfo = {};
+    dummyBufferInfo.buffer = s_ctx.dummyBuffer->handle;
+    dummyBufferInfo.offset = 0;
+    dummyBufferInfo.range = VK_WHOLE_SIZE;
+
+    VkWriteDescriptorSet dummyBufferWrite = {};
+    dummyBufferWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    dummyBufferWrite.dstSet = s_ctx.bindlessSet;
+    dummyBufferWrite.dstBinding = 4;
+    dummyBufferWrite.dstArrayElement = s_ctx.dummyBufferIndex;
+    dummyBufferWrite.descriptorCount = 1;
+    dummyBufferWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    dummyBufferWrite.pBufferInfo = &dummyBufferInfo;
+
+    TextureDesc dummyTextureDesc = {};
+    dummyTextureDesc.width = 1;
+    dummyTextureDesc.height = 1;
+    dummyTextureDesc.format = VK_FORMAT_R8G8B8A8_UNORM;
+    dummyTextureDesc.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    CreateTexture(dummyTextureDesc, s_ctx.dummyTexture);
+    s_ctx.dummyTextureIndex = s_ctx.textureFreeList.back();
+    s_ctx.textureFreeList.pop_back();
+    s_ctx.dummyTexture->views[0].bindlessIndexSampled = s_ctx.dummyTextureIndex;
+
+    VkDescriptorImageInfo dummyTextureInfo = {};
+    dummyTextureInfo.imageView = s_ctx.dummyTexture->views[0].handle;
+    dummyTextureInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkWriteDescriptorSet dummyTextureWrite = {};
+    dummyTextureWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    dummyTextureWrite.dstSet = s_ctx.bindlessSet;
+    dummyTextureWrite.dstBinding = 0;
+    dummyTextureWrite.dstArrayElement = s_ctx.dummyTextureIndex;
+    dummyTextureWrite.descriptorCount = 1;
+    dummyTextureWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    dummyTextureWrite.pImageInfo = &dummyTextureInfo;
+
+    TextureDesc dummyTexture3DDesc = {};
+    dummyTexture3DDesc.width = 1;
+    dummyTexture3DDesc.height = 1;
+    dummyTexture3DDesc.depth = 1;
+    dummyTexture3DDesc.imageType = VK_IMAGE_TYPE_3D;
+    dummyTexture3DDesc.format = VK_FORMAT_R8G8B8A8_UNORM;
+    dummyTexture3DDesc.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    CreateTexture(dummyTexture3DDesc, s_ctx.dummyTexture3D);
+    s_ctx.dummyTexture3DIndex = s_ctx.texture3DFreeList.back();
+    s_ctx.texture3DFreeList.pop_back();
+    s_ctx.dummyTexture3D->views[0].bindlessIndexSampled3D = s_ctx.dummyTexture3DIndex;
+
+    VkDescriptorImageInfo dummyTexture3DInfo = {};
+    dummyTexture3DInfo.imageView = s_ctx.dummyTexture3D->views[0].handle;
+    dummyTexture3DInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkWriteDescriptorSet dummyTexture3DWrite = {};
+    dummyTexture3DWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    dummyTexture3DWrite.dstSet = s_ctx.bindlessSet;
+    dummyTexture3DWrite.dstBinding = 3;
+    dummyTexture3DWrite.dstArrayElement = s_ctx.dummyTexture3DIndex;
+    dummyTexture3DWrite.descriptorCount = 1;
+    dummyTexture3DWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    dummyTexture3DWrite.pImageInfo = &dummyTexture3DInfo;
+
+    TextureDesc dummyStorageTextureDesc = {};
+    dummyStorageTextureDesc.width = 1;
+    dummyStorageTextureDesc.height = 1;
+    dummyStorageTextureDesc.format = VK_FORMAT_R8G8B8A8_UNORM;
+    dummyStorageTextureDesc.usage = VK_IMAGE_USAGE_STORAGE_BIT;
+    CreateTexture(dummyStorageTextureDesc, s_ctx.dummyStorageTexture);
+    s_ctx.dummyStorageTextureIndex = s_ctx.storageTextureFreeList.back();
+    s_ctx.storageTextureFreeList.pop_back();
+    s_ctx.dummyStorageTexture->views[0].bindlessIndexStorage = s_ctx.dummyStorageTextureIndex;
+
+    VkDescriptorImageInfo dummyStorageTextureInfo = {};
+    dummyStorageTextureInfo.imageView = s_ctx.dummyStorageTexture->views[0].handle;
+    dummyStorageTextureInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkWriteDescriptorSet dummyStorageTextureWrite = {};
+    dummyStorageTextureWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    dummyStorageTextureWrite.dstSet = s_ctx.bindlessSet;
+    dummyStorageTextureWrite.dstBinding = 2;
+    dummyStorageTextureWrite.dstArrayElement = s_ctx.dummyStorageTextureIndex;
+    dummyStorageTextureWrite.descriptorCount = 1;
+    dummyStorageTextureWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    dummyStorageTextureWrite.pImageInfo = &dummyStorageTextureInfo;
+
+    EzSamplerDesc dummySamplerDesc = {};
+    dummySamplerDesc.magFilter = VK_FILTER_NEAREST;
+    dummySamplerDesc.minFilter = VK_FILTER_NEAREST;
+    dummySamplerDesc.addressU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    dummySamplerDesc.addressV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    dummySamplerDesc.addressW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    dummySamplerDesc.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    CreateSampler(dummySamplerDesc, s_ctx.dummySampler);
+    s_ctx.dummySamplerIndex = s_ctx.samplerFreeList.back();
+    s_ctx.samplerFreeList.pop_back();
+    s_ctx.dummySampler->bindlessIndexSampler = s_ctx.dummySamplerIndex;
+
+    VkDescriptorImageInfo dummySamplerInfo = {};
+    dummySamplerInfo.sampler = s_ctx.dummySampler->handle;
+
+    VkWriteDescriptorSet dummySamplerWrite = {};
+    dummySamplerWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    dummySamplerWrite.dstSet = s_ctx.bindlessSet;
+    dummySamplerWrite.dstBinding = 1;
+    dummySamplerWrite.dstArrayElement = s_ctx.dummySamplerIndex;
+    dummySamplerWrite.descriptorCount = 1;
+    dummySamplerWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    dummySamplerWrite.pImageInfo = &dummySamplerInfo;
+
+    VkWriteDescriptorSet writes[6] = {dummyBufferWrite, dummyTextureWrite, dummyTexture3DWrite,
+                                      dummyStorageTextureWrite, dummySamplerWrite};
+    vkUpdateDescriptorSets(s_ctx.device, 5, writes, 0, nullptr);
+}
+
+void ShutdownBindlessRegistry()
+{
+    if (s_ctx.dummyTexture)
+    {
+        DestroyTexture(s_ctx.dummyTexture);
+        s_ctx.dummyTexture = nullptr;
+    }
+    if (s_ctx.dummyTexture3D)
+    {
+        DestroyTexture(s_ctx.dummyTexture3D);
+        s_ctx.dummyTexture3D = nullptr;
+    }
+    if (s_ctx.dummyStorageTexture)
+    {
+        DestroyTexture(s_ctx.dummyStorageTexture);
+        s_ctx.dummyStorageTexture = nullptr;
+    }
+    if (s_ctx.dummySampler)
+    {
+        DestroySampler(s_ctx.dummySampler);
+        s_ctx.dummySampler = nullptr;
+    }
+    if (s_ctx.dummyBuffer)
+    {
+        DestroyBuffer(s_ctx.dummyBuffer);
+        s_ctx.dummyBuffer = nullptr;
+    }
+    s_ctx.bufferFreeList.clear();
+    if (s_ctx.bindlessPool != VK_NULL_HANDLE)
+    {
+        vkDestroyDescriptorPool(s_ctx.device, s_ctx.bindlessPool, nullptr);
+        s_ctx.bindlessPool = VK_NULL_HANDLE;
+    }
+    if (s_ctx.bindlessLayout != VK_NULL_HANDLE)
+    {
+        vkDestroyDescriptorSetLayout(s_ctx.device, s_ctx.bindlessLayout, nullptr);
+        s_ctx.bindlessLayout = VK_NULL_HANDLE;
+    }
+    s_ctx.bindlessSet = VK_NULL_HANDLE;
+    s_ctx.textureFreeList.clear();
+    s_ctx.texture3DFreeList.clear();
+    s_ctx.storageTextureFreeList.clear();
+    s_ctx.samplerFreeList.clear();
+}
+
+uint32_t AllocateTextureBindlessIndex()
+{
+    if (s_ctx.textureFreeList.empty())
+    {
+        assert(false && "Texture bindless pool exhausted");
+        return 0;
+    }
+    uint32_t index = s_ctx.textureFreeList.back();
+    s_ctx.textureFreeList.pop_back();
+    return index;
+}
+
+void FreeTextureBindlessIndex(uint32_t index)
+{
+    if (index >= BindlessTextureCount)
+    {
+        return;
+    }
+
+    VkDescriptorImageInfo imageInfo = {};
+    imageInfo.imageView = s_ctx.dummyTexture->views[0].handle;
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkWriteDescriptorSet write = {};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = s_ctx.bindlessSet;
+    write.dstBinding = 0;
+    write.dstArrayElement = index;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    write.pImageInfo = &imageInfo;
+    vkUpdateDescriptorSets(s_ctx.device, 1, &write, 0, nullptr);
+
+    s_ctx.textureFreeList.push_back(index);
+}
+
+uint32_t AllocateTexture3DBindlessIndex()
+{
+    if (s_ctx.texture3DFreeList.empty())
+    {
+        assert(false && "Texture3D bindless pool exhausted");
+        return 0;
+    }
+    uint32_t index = s_ctx.texture3DFreeList.back();
+    s_ctx.texture3DFreeList.pop_back();
+    return index;
+}
+
+void FreeTexture3DBindlessIndex(uint32_t index)
+{
+    if (index >= BindlessTexture3DCount)
+    {
+        return;
+    }
+
+    VkDescriptorImageInfo imageInfo = {};
+    imageInfo.imageView = s_ctx.dummyTexture3D->views[0].handle;
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkWriteDescriptorSet write = {};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = s_ctx.bindlessSet;
+    write.dstBinding = 3;
+    write.dstArrayElement = index;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    write.pImageInfo = &imageInfo;
+    vkUpdateDescriptorSets(s_ctx.device, 1, &write, 0, nullptr);
+
+    s_ctx.texture3DFreeList.push_back(index);
+}
+
+uint32_t AllocateStorageTextureBindlessIndex()
+{
+    if (s_ctx.storageTextureFreeList.empty())
+    {
+        assert(false && "Storage texture bindless pool exhausted");
+        return 0;
+    }
+    uint32_t index = s_ctx.storageTextureFreeList.back();
+    s_ctx.storageTextureFreeList.pop_back();
+    return index;
+}
+
+void FreeStorageTextureBindlessIndex(uint32_t index)
+{
+    if (index >= BindlessStorageTextureCount)
+    {
+        return;
+    }
+
+    VkDescriptorImageInfo imageInfo = {};
+    imageInfo.imageView = s_ctx.dummyStorageTexture->views[0].handle;
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkWriteDescriptorSet write = {};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = s_ctx.bindlessSet;
+    write.dstBinding = 2;
+    write.dstArrayElement = index;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    write.pImageInfo = &imageInfo;
+    vkUpdateDescriptorSets(s_ctx.device, 1, &write, 0, nullptr);
+
+    s_ctx.storageTextureFreeList.push_back(index);
+}
+
+uint32_t AllocateSamplerBindlessIndex()
+{
+    if (s_ctx.samplerFreeList.empty())
+    {
+        assert(false && "Sampler bindless pool exhausted");
+        return 0;
+    }
+    uint32_t index = s_ctx.samplerFreeList.back();
+    s_ctx.samplerFreeList.pop_back();
+    return index;
+}
+
+void FreeSamplerBindlessIndex(uint32_t index)
+{
+    if (index >= BindlessSamplerCount)
+    {
+        return;
+    }
+
+    VkDescriptorImageInfo samplerInfo = {};
+    samplerInfo.sampler = s_ctx.dummySampler->handle;
+
+    VkWriteDescriptorSet write = {};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = s_ctx.bindlessSet;
+    write.dstBinding = 1;
+    write.dstArrayElement = index;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    write.pImageInfo = &samplerInfo;
+    vkUpdateDescriptorSets(s_ctx.device, 1, &write, 0, nullptr);
+
+    s_ctx.samplerFreeList.push_back(index);
+}
+
+uint32_t AllocateBufferBindlessIndex()
+{
+    if (s_ctx.bufferFreeList.empty())
+    {
+        assert(false && "Buffer bindless pool exhausted");
+        return 0;
+    }
+    uint32_t index = s_ctx.bufferFreeList.back();
+    s_ctx.bufferFreeList.pop_back();
+    return index;
+}
+
+void FreeBufferBindlessIndex(uint32_t index)
+{
+    if (index >= BindlessStorageBufferCount)
+    {
+        return;
+    }
+
+    VkDescriptorBufferInfo bufferInfo = {};
+    bufferInfo.buffer = s_ctx.dummyBuffer->handle;
+    bufferInfo.offset = 0;
+    bufferInfo.range = VK_WHOLE_SIZE;
+
+    VkWriteDescriptorSet write = {};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = s_ctx.bindlessSet;
+    write.dstBinding = 4;
+    write.dstArrayElement = index;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    write.pBufferInfo = &bufferInfo;
+    vkUpdateDescriptorSets(s_ctx.device, 1, &write, 0, nullptr);
+
+    s_ctx.bufferFreeList.push_back(index);
+}
+
+void CreateBindless(Buffer* buffer, VkBufferUsageFlags usage)
+{
+    assert(buffer->memoryUsage == VMA_MEMORY_USAGE_GPU_ONLY);
+    assert(!buffer->dynamicBuffer);
+    assert(buffer->bindlessIndexStorage == 0xFFFFFFFF);
+
+    if (usage == VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)
+    {
+        uint32_t index = AllocateBufferBindlessIndex();
+        buffer->bindlessIndexStorage = index;
+
+        VkDescriptorBufferInfo bufferInfo = {};
+        bufferInfo.buffer = buffer->handle;
+        bufferInfo.offset = 0;
+        bufferInfo.range = VK_WHOLE_SIZE;
+
+        VkWriteDescriptorSet write = {};
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = s_ctx.bindlessSet;
+        write.dstBinding = 4;
+        write.dstArrayElement = index;
+        write.descriptorCount = 1;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        write.pBufferInfo = &bufferInfo;
+        vkUpdateDescriptorSets(s_ctx.device, 1, &write, 0, nullptr);
+    }
+    else
+    {
+        assert(false && "Unsupported buffer bindless usage");
+    }
+}
+
+void CreateBindless(Texture* texture, int view, VkImageUsageFlags usage)
+{
+    assert(view >= 0 && view < static_cast<int>(texture->views.size()));
+    TextureView& textureView = texture->views[view];
+
+    if (usage & VK_IMAGE_USAGE_SAMPLED_BIT)
+    {
+        if (texture->imageType == VK_IMAGE_TYPE_3D)
+        {
+            assert(textureView.bindlessIndexSampled3D == 0xFFFFFFFF);
+            uint32_t index = AllocateTexture3DBindlessIndex();
+            textureView.bindlessIndexSampled3D = index;
+
+            VkDescriptorImageInfo imageInfo = {};
+            imageInfo.imageView = textureView.handle;
+            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+            VkWriteDescriptorSet write = {};
+            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            write.dstSet = s_ctx.bindlessSet;
+            write.dstBinding = 3;
+            write.dstArrayElement = index;
+            write.descriptorCount = 1;
+            write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            write.pImageInfo = &imageInfo;
+            vkUpdateDescriptorSets(s_ctx.device, 1, &write, 0, nullptr);
+        }
+        else
+        {
+            assert(textureView.bindlessIndexSampled == 0xFFFFFFFF);
+            uint32_t index = AllocateTextureBindlessIndex();
+            textureView.bindlessIndexSampled = index;
+
+            VkDescriptorImageInfo imageInfo = {};
+            imageInfo.imageView = textureView.handle;
+            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+            VkWriteDescriptorSet write = {};
+            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            write.dstSet = s_ctx.bindlessSet;
+            write.dstBinding = 0;
+            write.dstArrayElement = index;
+            write.descriptorCount = 1;
+            write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            write.pImageInfo = &imageInfo;
+            vkUpdateDescriptorSets(s_ctx.device, 1, &write, 0, nullptr);
+        }
+    }
+    else if (usage & VK_IMAGE_USAGE_STORAGE_BIT)
+    {
+        assert(textureView.bindlessIndexStorage == 0xFFFFFFFF);
+        uint32_t index = AllocateStorageTextureBindlessIndex();
+        textureView.bindlessIndexStorage = index;
+
+        VkDescriptorImageInfo imageInfo = {};
+        imageInfo.imageView = textureView.handle;
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+        VkWriteDescriptorSet write = {};
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = s_ctx.bindlessSet;
+        write.dstBinding = 2;
+        write.dstArrayElement = index;
+        write.descriptorCount = 1;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        write.pImageInfo = &imageInfo;
+        vkUpdateDescriptorSets(s_ctx.device, 1, &write, 0, nullptr);
+    }
+    else
+    {
+        assert(false && "Unsupported texture bindless usage");
+    }
+}
+
+void CreateBindless(Sampler* sampler)
+{
+    assert(sampler->bindlessIndexSampler == 0xFFFFFFFF);
+    uint32_t index = AllocateSamplerBindlessIndex();
+    sampler->bindlessIndexSampler = index;
+
+    VkDescriptorImageInfo samplerInfo = {};
+    samplerInfo.sampler = sampler->handle;
+
+    VkWriteDescriptorSet write = {};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = s_ctx.bindlessSet;
+    write.dstBinding = 1;
+    write.dstArrayElement = index;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    write.pImageInfo = &samplerInfo;
+    vkUpdateDescriptorSets(s_ctx.device, 1, &write, 0, nullptr);
 }
 
 void CreateDynamicDescriptorPool(CommandBuffer* cmd)
@@ -331,21 +904,15 @@ VkImageAspectFlags GetAspectMask(VkFormat format)
     {
         case VK_FORMAT_D16_UNORM:
         case VK_FORMAT_X8_D24_UNORM_PACK32:
-        case VK_FORMAT_D32_SFLOAT:
-            result = VK_IMAGE_ASPECT_DEPTH_BIT;
-            break;
-        case VK_FORMAT_S8_UINT:
-            result = VK_IMAGE_ASPECT_STENCIL_BIT;
-            break;
+        case VK_FORMAT_D32_SFLOAT: result = VK_IMAGE_ASPECT_DEPTH_BIT; break;
+        case VK_FORMAT_S8_UINT: result = VK_IMAGE_ASPECT_STENCIL_BIT; break;
         case VK_FORMAT_D16_UNORM_S8_UINT:
         case VK_FORMAT_D24_UNORM_S8_UINT:
         case VK_FORMAT_D32_SFLOAT_S8_UINT:
             result = VK_IMAGE_ASPECT_DEPTH_BIT;
             result |= VK_IMAGE_ASPECT_STENCIL_BIT;
             break;
-        default:
-            result = VK_IMAGE_ASPECT_COLOR_BIT;
-            break;
+        default: result = VK_IMAGE_ASPECT_COLOR_BIT; break;
     }
     return result;
 }
@@ -362,7 +929,8 @@ void Startup()
     uint32_t numInstanceAvailableExtensions;
     VK_ASSERT(vkEnumerateInstanceExtensionProperties(nullptr, &numInstanceAvailableExtensions, nullptr));
     std::vector<VkExtensionProperties> instanceSupportedExtensions(numInstanceAvailableExtensions);
-    VK_ASSERT(vkEnumerateInstanceExtensionProperties(nullptr, &numInstanceAvailableExtensions, instanceSupportedExtensions.data()));
+    VK_ASSERT(vkEnumerateInstanceExtensionProperties(nullptr, &numInstanceAvailableExtensions,
+                                                     instanceSupportedExtensions.data()));
 
     std::vector<const char*> instanceRequiredLayers;
     std::vector<const char*> instanceRequiredExtensions;
@@ -414,8 +982,10 @@ void Startup()
 
 #ifdef VK_DEBUG
     VkDebugUtilsMessengerCreateInfoEXT messengerCreateInfo = {VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
-    messengerCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    messengerCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    messengerCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
+        | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    messengerCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
+        | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     messengerCreateInfo.pfnUserCallback = debugUtilsMessengerCB;
     VK_ASSERT(vkCreateDebugUtilsMessengerEXT(s_ctx.instance, &messengerCreateInfo, nullptr, &s_ctx.debugMessenger));
 #endif
@@ -430,13 +1000,9 @@ void Startup()
         VkPhysicalDeviceProperties props;
         vkGetPhysicalDeviceProperties(gpu, &props);
         LOGI("Found Vulkan GPU: %s", props.deviceName);
-        LOGI("API: %u.%u.%u",
-             VK_VERSION_MAJOR(props.apiVersion),
-             VK_VERSION_MINOR(props.apiVersion),
+        LOGI("API: %u.%u.%u", VK_VERSION_MAJOR(props.apiVersion), VK_VERSION_MINOR(props.apiVersion),
              VK_VERSION_PATCH(props.apiVersion));
-        LOGI("Driver: %u.%u.%u",
-             VK_VERSION_MAJOR(props.driverVersion),
-             VK_VERSION_MINOR(props.driverVersion),
+        LOGI("Driver: %u.%u.%u", VK_VERSION_MAJOR(props.driverVersion), VK_VERSION_MINOR(props.driverVersion),
              VK_VERSION_PATCH(props.driverVersion));
     }
     s_ctx.physicalDevice = gpus.front();
@@ -449,6 +1015,15 @@ void Startup()
     s_ctx.features_1_3.dynamicRendering = true;
     s_ctx.features_1_3.synchronization2 = true;
     s_ctx.features_1_3.maintenance4 = true;
+    s_ctx.features_1_2.descriptorIndexing = true;
+    s_ctx.features_1_2.shaderSampledImageArrayNonUniformIndexing = true;
+    s_ctx.features_1_2.shaderStorageImageArrayNonUniformIndexing = true;
+    s_ctx.features_1_2.shaderStorageBufferArrayNonUniformIndexing = true;
+    s_ctx.features_1_2.descriptorBindingSampledImageUpdateAfterBind = true;
+    s_ctx.features_1_2.descriptorBindingStorageImageUpdateAfterBind = true;
+    s_ctx.features_1_2.descriptorBindingStorageBufferUpdateAfterBind = true;
+    s_ctx.features_1_2.descriptorBindingPartiallyBound = true;
+    s_ctx.features_1_2.descriptorBindingVariableDescriptorCount = true;
     s_ctx.features2.pNext = &s_ctx.features_1_1;
     s_ctx.features_1_1.pNext = &s_ctx.features_1_2;
     s_ctx.features_1_2.pNext = &s_ctx.features_1_3;
@@ -457,7 +1032,8 @@ void Startup()
     uint32_t numDeviceAvailableExtensions = 0;
     VK_ASSERT(vkEnumerateDeviceExtensionProperties(s_ctx.physicalDevice, nullptr, &numDeviceAvailableExtensions, nullptr));
     std::vector<VkExtensionProperties> deviceAvailableExtensions(numDeviceAvailableExtensions);
-    VK_ASSERT(vkEnumerateDeviceExtensionProperties(s_ctx.physicalDevice, nullptr, &numDeviceAvailableExtensions, deviceAvailableExtensions.data()));
+    VK_ASSERT(vkEnumerateDeviceExtensionProperties(s_ctx.physicalDevice, nullptr, &numDeviceAvailableExtensions,
+                                                   deviceAvailableExtensions.data()));
 
     std::vector<const char*> deviceExtensions;
     deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
@@ -471,7 +1047,7 @@ void Startup()
         *properties_chain = &s_ctx.accelerationStructureProperties;
         properties_chain = &s_ctx.accelerationStructureProperties.pNext;
 
-        if(IsExtensionSupported(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, deviceAvailableExtensions))
+        if (IsExtensionSupported(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, deviceAvailableExtensions))
         {
             deviceExtensions.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
             deviceExtensions.push_back(VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME);
@@ -481,7 +1057,7 @@ void Startup()
             properties_chain = &s_ctx.raytracingProperties.pNext;
         }
 
-        if(IsExtensionSupported(VK_KHR_RAY_QUERY_EXTENSION_NAME, deviceAvailableExtensions))
+        if (IsExtensionSupported(VK_KHR_RAY_QUERY_EXTENSION_NAME, deviceAvailableExtensions))
         {
             deviceExtensions.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
             *features_chain = &s_ctx.raytracingQueryFeatures;
@@ -594,6 +1170,8 @@ void Startup()
         poolCreateInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
         VK_ASSERT(vkCreateCommandPool(s_ctx.device, &poolCreateInfo, nullptr, &frame.cmdPool));
     }
+
+    InitBindlessRegistry();
 }
 
 void Shutdown()
@@ -628,6 +1206,8 @@ void Shutdown()
         vkDestroyCommandPool(s_ctx.device, frame.cmdPool, nullptr);
     }
 
+    ShutdownBindlessRegistry();
+
     UpdateResourceMgr(~0, 0);
 
     vmaDestroyAllocator(s_ctx.allocator);
@@ -635,21 +1215,16 @@ void Shutdown()
     vkDestroyInstance(s_ctx.instance, nullptr);
 }
 
-uint8_t GetFrameIndex()
-{
-    return s_ctx.frameIndex;
-}
+uint8_t GetFrameIndex() { return s_ctx.frameIndex; }
 
-uint8_t GetMaxFramesInFlight()
-{
-    return RHI_MAX_FRAMES_IN_FLIGHT;
-}
+uint8_t GetMaxFramesInFlight() { return RHI_MAX_FRAMES_IN_FLIGHT; }
 
 void CreateBuffer(const BufferDesc& desc, Buffer*& buffer)
 {
     buffer = new Buffer();
     buffer->size = desc.size;
     buffer->memoryUsage = desc.memoryUsage;
+    buffer->bufferUsage = desc.bufferUsage;
     buffer->dynamicBuffer = desc.dynamicBuffer;
     buffer->currentWriteIndex = 0;
     buffer->lastWriteFrame = 0;
@@ -667,7 +1242,8 @@ void CreateBuffer(const BufferDesc& desc, Buffer*& buffer)
 
     VmaAllocationCreateInfo allocCreateInfo = {};
     allocCreateInfo.usage = desc.memoryUsage;
-    VK_ASSERT(vmaCreateBuffer(s_ctx.allocator, &bufferCreateInfo, &allocCreateInfo, &buffer->handle, &buffer->allocation, nullptr));
+    VK_ASSERT(vmaCreateBuffer(s_ctx.allocator, &bufferCreateInfo, &allocCreateInfo, &buffer->handle,
+                              &buffer->allocation, nullptr));
 
     if (bufferCreateInfo.usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
     {
@@ -680,6 +1256,11 @@ void CreateBuffer(const BufferDesc& desc, Buffer*& buffer)
 
 void DestroyBuffer(Buffer* buffer)
 {
+    if (buffer->bindlessIndexStorage != 0xFFFFFFFF)
+    {
+        FreeBufferBindlessIndex(buffer->bindlessIndexStorage);
+        buffer->bindlessIndexStorage = 0xFFFFFFFF;
+    }
     s_resMgr.destroyerBuffers.emplace_back(std::make_pair(buffer->handle, buffer->allocation), s_ctx.frameCount);
     delete buffer;
 }
@@ -702,10 +1283,7 @@ void* MapMemory(Buffer* buffer)
     return mappedData;
 }
 
-void UnmapMemory(Buffer* buffer)
-{
-    vmaUnmapMemory(s_ctx.allocator, buffer->allocation);
-}
+void UnmapMemory(Buffer* buffer) { vmaUnmapMemory(s_ctx.allocator, buffer->allocation); }
 
 StageAllocation RequestStageBuffer(size_t size)
 {
@@ -746,6 +1324,7 @@ void CreateTexture(const TextureDesc& desc, Texture*& texture)
     texture->levels = desc.levels;
     texture->layers = desc.layers;
     texture->format = desc.format;
+    texture->imageType = desc.imageType;
 
     VkImageCreateInfo imageCreateInfo = {};
     imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -768,34 +1347,59 @@ void CreateTexture(const TextureDesc& desc, Texture*& texture)
     VmaAllocationCreateInfo allocCreateInfo = {};
     allocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
-    VK_ASSERT(vmaCreateImage(s_ctx.allocator, &imageCreateInfo, &allocCreateInfo, &texture->handle, &texture->allocation, nullptr));
+    VK_ASSERT(vmaCreateImage(s_ctx.allocator, &imageCreateInfo, &allocCreateInfo, &texture->handle,
+                             &texture->allocation, nullptr));
+    texture->usage = imageCreateInfo.usage;
+
+    VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D;
+    if (desc.imageType == VK_IMAGE_TYPE_1D)
+    {
+        viewType = VK_IMAGE_VIEW_TYPE_1D;
+    }
+    else if (desc.imageType == VK_IMAGE_TYPE_3D)
+    {
+        viewType = VK_IMAGE_VIEW_TYPE_3D;
+    }
+
+    CreateTextureView(texture, viewType, 0, desc.levels, 0, desc.layers);
 }
 
 void DestroyTexture(Texture* texture)
 {
-    s_resMgr.destroyerImages.emplace_back(std::make_pair(texture->handle, texture->allocation), s_ctx.frameCount);
-    for (auto view : texture->views)
+    for (auto& view : texture->views)
     {
+        if (view.bindlessIndexSampled != 0xFFFFFFFF)
+        {
+            FreeTextureBindlessIndex(view.bindlessIndexSampled);
+        }
+        if (view.bindlessIndexSampled3D != 0xFFFFFFFF)
+        {
+            FreeTexture3DBindlessIndex(view.bindlessIndexSampled3D);
+        }
+        if (view.bindlessIndexStorage != 0xFFFFFFFF)
+        {
+            FreeStorageTextureBindlessIndex(view.bindlessIndexStorage);
+        }
         s_resMgr.destroyerImageViews.emplace_back(view.handle, s_ctx.frameCount);
     }
+    s_resMgr.destroyerImages.emplace_back(std::make_pair(texture->handle, texture->allocation), s_ctx.frameCount);
     delete texture;
 }
 
-int CreateTextureView(Texture* texture, VkImageViewType view_type, VkImageAspectFlags aspect_mask,
-                      uint32_t base_level, uint32_t level_count,
-                      uint32_t base_layer, uint32_t layer_count)
+int CreateTextureView(Texture* texture, VkImageViewType viewType, uint32_t baseLevel, uint32_t levelCount,
+                      uint32_t baseLayer, uint32_t layerCount)
 {
     VkImageViewCreateInfo viewCreateInfo = {};
     viewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewCreateInfo.flags = 0;
     viewCreateInfo.image = texture->handle;
-    viewCreateInfo.subresourceRange.aspectMask = aspect_mask;
-    viewCreateInfo.subresourceRange.baseArrayLayer = base_layer;
-    viewCreateInfo.subresourceRange.layerCount = layer_count;
-    viewCreateInfo.subresourceRange.baseMipLevel = base_level;
-    viewCreateInfo.subresourceRange.levelCount = level_count;
+    viewCreateInfo.subresourceRange.aspectMask = GetAspectMask(texture->format);
+    viewCreateInfo.subresourceRange.baseArrayLayer = baseLayer;
+    viewCreateInfo.subresourceRange.layerCount = layerCount;
+    viewCreateInfo.subresourceRange.baseMipLevel = baseLevel;
+    viewCreateInfo.subresourceRange.levelCount = levelCount;
     viewCreateInfo.format = texture->format;
-    viewCreateInfo.viewType = view_type;
+    viewCreateInfo.viewType = viewType;
 
     VkImageView imageView;
     VK_ASSERT(vkCreateImageView(s_ctx.device, &viewCreateInfo, nullptr, &imageView));
@@ -803,6 +1407,7 @@ int CreateTextureView(Texture* texture, VkImageViewType view_type, VkImageAspect
     TextureView view = {};
     view.handle = imageView;
     view.subresourceRange = viewCreateInfo.subresourceRange;
+
     texture->views.push_back(view);
     return int(texture->views.size()) - 1;
 }
@@ -826,10 +1431,15 @@ void CreateSampler(const EzSamplerDesc& desc, Sampler*& sampler)
     samplerCreateInfo.compareEnable = desc.compareEnable;
     samplerCreateInfo.compareOp = desc.compareOp;
     VK_ASSERT(vkCreateSampler(s_ctx.device, &samplerCreateInfo, nullptr, &sampler->handle));
+
 }
 
 void DestroySampler(Sampler* sampler)
 {
+    if (sampler->bindlessIndexSampler != 0xFFFFFFFF)
+    {
+        FreeSamplerBindlessIndex(sampler->bindlessIndexSampler);
+    }
     s_resMgr.destroyerSamplers.emplace_back(sampler->handle, s_ctx.frameCount);
     delete sampler;
 }
@@ -882,14 +1492,34 @@ void CreateShader(void* data, size_t size, Shader*& shader)
 
     // Process descriptor bindings
     shader->layoutBindings.reserve(bindings.size());
-    for (const auto& binding : bindings)
+    for (const auto* binding : bindings)
     {
+        if (binding->set == 1)
+        {
+            continue;
+        }
+
         VkDescriptorSetLayoutBinding descriptor = {};
         descriptor.stageFlags = shader->stageInfo.stage;
         descriptor.binding = binding->binding;
         descriptor.descriptorCount = binding->count;
         descriptor.descriptorType = static_cast<VkDescriptorType>(binding->descriptor_type);
         shader->layoutBindings.push_back(descriptor);
+
+        if (!binding->name || binding->name[0] == '\0')
+        {
+            LOGE("Shader binding has no name at set=%u binding=%u", binding->set, binding->binding);
+            assert(false);
+        }
+
+        StringHash nameHash = Fnv1aHash(binding->name);
+        auto it = shader->nameToBinding.find(nameHash);
+        if (it != shader->nameToBinding.end() && it->second != binding->binding)
+        {
+            LOGE("Named binding hash collision at binding %u", binding->binding);
+            assert(false);
+        }
+        shader->nameToBinding[nameHash] = binding->binding;
     }
 }
 
@@ -900,12 +1530,43 @@ void DestroyShader(Shader* shader)
     delete shader;
 }
 
+static bool ShaderUsesBindless(Shader* shader)
+{
+    uint32_t bindingCount = 0;
+    SpvReflectResult result = spvReflectEnumerateDescriptorBindings(&shader->reflect, &bindingCount, nullptr);
+    if (result != SPV_REFLECT_RESULT_SUCCESS || bindingCount == 0)
+    {
+        return false;
+    }
+
+    std::vector<SpvReflectDescriptorBinding*> bindings(bindingCount);
+    result = spvReflectEnumerateDescriptorBindings(&shader->reflect, &bindingCount, bindings.data());
+    if (result != SPV_REFLECT_RESULT_SUCCESS)
+    {
+        return false;
+    }
+
+    for (const auto* binding : bindings)
+    {
+        if (binding->set == 1)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 void CreatePipelineLayout(Pipeline*& pipeline, const std::vector<Shader*>& shaders)
 {
     std::unordered_map<uint32_t, VkDescriptorSetLayoutBinding> bindingMap;
 
-    auto processShader = [&](Shader* shader)
+    for (Shader* shader : shaders)
     {
+        if (!shader)
+        {
+            continue;
+        }
+
         for (const auto& layoutBinding : shader->layoutBindings)
         {
             auto it = bindingMap.find(layoutBinding.binding);
@@ -916,7 +1577,6 @@ void CreatePipelineLayout(Pipeline*& pipeline, const std::vector<Shader*>& shade
             else
             {
                 bindingMap[layoutBinding.binding] = layoutBinding;
-                pipeline->layoutBindings.push_back(layoutBinding);
             }
         }
 
@@ -926,11 +1586,30 @@ void CreatePipelineLayout(Pipeline*& pipeline, const std::vector<Shader*>& shade
             pipeline->pushConstants.size = RHI_MAX(pipeline->pushConstants.size, shader->pushConstants.size);
             pipeline->pushConstants.stageFlags |= shader->pushConstants.stageFlags;
         }
-    };
 
-    for (size_t i = 0; i < shaders.size(); ++i)
+        for (const auto& pair : shader->nameToBinding)
+        {
+            auto it = pipeline->nameToBinding.find(pair.first);
+            if (it != pipeline->nameToBinding.end())
+            {
+                assert(it->second == pair.second);
+            }
+            else
+            {
+                pipeline->nameToBinding[pair.first] = pair.second;
+            }
+        }
+
+        if (ShaderUsesBindless(shader))
+        {
+            pipeline->usesBindless = true;
+        }
+    }
+
+    pipeline->layoutBindings.reserve(bindingMap.size());
+    for (const auto& pair : bindingMap)
     {
-        processShader(shaders[i]);
+        pipeline->layoutBindings.push_back(pair.second);
     }
 
     for (uint32_t i = 0; i < pipeline->layoutBindings.size(); ++i)
@@ -939,23 +1618,24 @@ void CreatePipelineLayout(Pipeline*& pipeline, const std::vector<Shader*>& shade
     }
 
     std::sort(pipeline->layoutBindings.begin(), pipeline->layoutBindings.end(),
-              [](const auto& a, const auto& b)
-              {
-                  return a.binding < b.binding;
-              });
+              [](const auto& a, const auto& b) { return a.binding < b.binding; });
 
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
     descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     descriptorSetLayoutCreateInfo.bindingCount = static_cast<uint32_t>(pipeline->layoutBindings.size());
     descriptorSetLayoutCreateInfo.pBindings = pipeline->layoutBindings.data();
-    VK_ASSERT(vkCreateDescriptorSetLayout(s_ctx.device, &descriptorSetLayoutCreateInfo, nullptr, &pipeline->descriptorSetLayout));
+    VK_ASSERT(vkCreateDescriptorSetLayout(s_ctx.device, &descriptorSetLayoutCreateInfo, nullptr,
+                                          &pipeline->descriptorSetLayout));
+
+    VkDescriptorSetLayout setLayouts[2] = {pipeline->descriptorSetLayout, s_ctx.bindlessLayout};
 
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
     pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutCreateInfo.setLayoutCount = 1;
-    pipelineLayoutCreateInfo.pSetLayouts = &pipeline->descriptorSetLayout;
+    pipelineLayoutCreateInfo.setLayoutCount = pipeline->usesBindless ? 2u : 1u;
+    pipelineLayoutCreateInfo.pSetLayouts = setLayouts;
     pipelineLayoutCreateInfo.pushConstantRangeCount = (pipeline->pushConstants.size > 0) ? 1u : 0u;
-    pipelineLayoutCreateInfo.pPushConstantRanges = (pipeline->pushConstants.size > 0) ? &pipeline->pushConstants : nullptr;
+    pipelineLayoutCreateInfo.pPushConstantRanges =
+        (pipeline->pushConstants.size > 0) ? &pipeline->pushConstants : nullptr;
     VK_ASSERT(vkCreatePipelineLayout(s_ctx.device, &pipelineLayoutCreateInfo, nullptr, &pipeline->pipelineLayout));
 }
 
@@ -1055,8 +1735,10 @@ void CreateGraphicsPipeline(const GraphicsPipelineDesc& desc, Pipeline*& pipelin
     for (uint32_t i = 0; i < RHI_MAX_ATTACHMENT_COUNT; ++i)
     {
         if (!desc.renderPass || !desc.renderPass->desc.colors[i].texture)
+        {
             continue;
-        
+        }
+
         VkPipelineColorBlendAttachmentState attachment = {};
         attachment.blendEnable = desc.blendState.blendEnable ? VK_TRUE : VK_FALSE;
         attachment.colorWriteMask |= VK_COLOR_COMPONENT_R_BIT;
@@ -1130,14 +1812,8 @@ void CreateGraphicsPipeline(const GraphicsPipelineDesc& desc, Pipeline*& pipelin
     pipelineCreateInfo.pViewportState = &viewportStateCreateInfo;
 
     // Dynamic states
-    VkDynamicState dynamicStates[] =
-    {
-        VK_DYNAMIC_STATE_VIEWPORT,
-        VK_DYNAMIC_STATE_SCISSOR,
-        VK_DYNAMIC_STATE_DEPTH_BIAS,
-        VK_DYNAMIC_STATE_BLEND_CONSTANTS,
-        VK_DYNAMIC_STATE_DEPTH_BOUNDS
-    };
+    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_DEPTH_BIAS,
+                                      VK_DYNAMIC_STATE_BLEND_CONSTANTS, VK_DYNAMIC_STATE_DEPTH_BOUNDS};
 
     VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo = {};
     dynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -1147,7 +1823,7 @@ void CreateGraphicsPipeline(const GraphicsPipelineDesc& desc, Pipeline*& pipelin
     pipelineCreateInfo.pDynamicState = &dynamicStateCreateInfo;
 
     std::vector<VkFormat> colorFormats;
-    
+
     if (desc.renderPass)
     {
         for (uint32_t i = 0; i < RHI_MAX_ATTACHMENT_COUNT; ++i)
@@ -1158,13 +1834,17 @@ void CreateGraphicsPipeline(const GraphicsPipelineDesc& desc, Pipeline*& pipelin
             }
         }
     }
-    
+
     VkPipelineRenderingCreateInfo renderingCreateInfo = {};
     renderingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     renderingCreateInfo.colorAttachmentCount = static_cast<uint32_t>(colorFormats.size());
     renderingCreateInfo.pColorAttachmentFormats = colorFormats.data();
-    renderingCreateInfo.depthAttachmentFormat = (desc.renderPass && desc.renderPass->desc.depth.texture) ? desc.renderPass->desc.depth.texture->format : VK_FORMAT_UNDEFINED;
-    renderingCreateInfo.stencilAttachmentFormat = (desc.renderPass && desc.renderPass->desc.stencil.texture) ? desc.renderPass->desc.stencil.texture->format : VK_FORMAT_UNDEFINED;
+    renderingCreateInfo.depthAttachmentFormat = (desc.renderPass && desc.renderPass->desc.depth.texture)
+        ? desc.renderPass->desc.depth.texture->format
+        : VK_FORMAT_UNDEFINED;
+    renderingCreateInfo.stencilAttachmentFormat = (desc.renderPass && desc.renderPass->desc.stencil.texture)
+        ? desc.renderPass->desc.stencil.texture->format
+        : VK_FORMAT_UNDEFINED;
     pipelineCreateInfo.pNext = &renderingCreateInfo;
 
     VK_ASSERT(vkCreateGraphicsPipelines(s_ctx.device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &pipeline->handle));
@@ -1197,7 +1877,7 @@ void CreateRenderPass(const RenderPassDesc& desc, RenderPass*& renderPass)
 {
     renderPass = new RenderPass();
     renderPass->desc = desc;
-    
+
     for (uint32_t i = 0; i < RHI_MAX_ATTACHMENT_COUNT; ++i)
     {
         if (desc.colors[i].texture)
@@ -1207,13 +1887,13 @@ void CreateRenderPass(const RenderPassDesc& desc, RenderPass*& renderPass)
             break;
         }
     }
-    
+
     if (renderPass->width == 0 && desc.depth.texture)
     {
         renderPass->width = desc.depth.texture->width;
         renderPass->height = desc.depth.texture->height;
     }
-    
+
     if (renderPass->width == 0 && desc.stencil.texture)
     {
         renderPass->width = desc.stencil.texture->width;
@@ -1221,10 +1901,7 @@ void CreateRenderPass(const RenderPassDesc& desc, RenderPass*& renderPass)
     }
 }
 
-void DestroyRenderPass(RenderPass* renderPass)
-{
-    delete renderPass;
-}
+void DestroyRenderPass(RenderPass* renderPass) { delete renderPass; }
 
 void CreateSwapchain(void* window, Swapchain*& swapchain)
 {
@@ -1239,7 +1916,7 @@ void CreateSwapchain(void* window, Swapchain*& swapchain)
     surfaceCreateInfo.hwnd = (HWND)window;
     VK_ASSERT(vkCreateWin32SurfaceKHR(s_ctx.instance, &surfaceCreateInfo, nullptr, &swapchain->surface));
 #else
-    #error "Unsupported platform for Vulkan surface creation"
+#error "Unsupported platform for Vulkan surface creation"
 #endif
 
     UpdateSwapchain(swapchain);
@@ -1368,7 +2045,8 @@ void CmdUploadBuffer(CommandBuffer* cmd, Buffer* buffer, uint32_t size, uint32_t
     CmdCopyBuffer(cmd, allocation.buffer, buffer, range);
 }
 
-void CmdCopyBufferToTexture(CommandBuffer* cmd, Buffer* src, Texture* dst, uint32_t srcOffset, const TextureRegion& region)
+void CmdCopyBufferToTexture(CommandBuffer* cmd, Buffer* src, Texture* dst, uint32_t srcOffset,
+                            const TextureRegion& region)
 {
     VkBufferImageCopy copyRegion = {};
     copyRegion.bufferOffset = srcOffset;
@@ -1393,29 +2071,19 @@ void CmdUploadTexture(CommandBuffer* cmd, Texture* texture, const TextureRegion&
     uint32_t pixelSize = 4;
     switch (texture->format)
     {
-        case VK_FORMAT_R8_UNORM:
-            pixelSize = 1;
-            break;
+        case VK_FORMAT_R8_UNORM: pixelSize = 1; break;
         case VK_FORMAT_R16_UNORM:
         case VK_FORMAT_R16_SFLOAT:
-        case VK_FORMAT_R8G8_UNORM:
-            pixelSize = 2;
-            break;
+        case VK_FORMAT_R8G8_UNORM: pixelSize = 2; break;
         case VK_FORMAT_R8G8B8A8_UNORM:
         case VK_FORMAT_B8G8R8A8_UNORM:
         case VK_FORMAT_R32_SFLOAT:
         case VK_FORMAT_R8G8B8_UNORM:
-        case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
-            pixelSize = 4;
-            break;
+        case VK_FORMAT_A2R10G10B10_UNORM_PACK32: pixelSize = 4; break;
         case VK_FORMAT_R16G16_SFLOAT:
-        case VK_FORMAT_R16G16B16A16_SFLOAT:
-            pixelSize = 8;
-            break;
+        case VK_FORMAT_R16G16B16A16_SFLOAT: pixelSize = 8; break;
         case VK_FORMAT_R32G32_SFLOAT:
-        case VK_FORMAT_R32G32B32A32_SFLOAT:
-            pixelSize = 16;
-            break;
+        case VK_FORMAT_R32G32B32A32_SFLOAT: pixelSize = 16; break;
         default:
             assert(false && "Unsupported texture format for CmdUploadTexture");
             pixelSize = 4;
@@ -1455,43 +2123,52 @@ void CmdCopyTexture(CommandBuffer* cmd, Texture* src, Texture* dst)
         region.extent.height = src->height >> mip;
         region.extent.depth = src->depth;
 
-        if (region.extent.width == 0) region.extent.width = 1;
-        if (region.extent.height == 0) region.extent.height = 1;
-        if (region.extent.depth == 0) region.extent.depth = 1;
+        if (region.extent.width == 0)
+        {
+            region.extent.width = 1;
+        }
+        if (region.extent.height == 0)
+        {
+            region.extent.height = 1;
+        }
+        if (region.extent.depth == 0)
+        {
+            region.extent.depth = 1;
+        }
 
         regions.push_back(region);
     }
 
-    vkCmdCopyImage(cmd->handle, src->handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                   dst->handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                   static_cast<uint32_t>(regions.size()), regions.data());
+    vkCmdCopyImage(cmd->handle, src->handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst->handle,
+                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, static_cast<uint32_t>(regions.size()), regions.data());
 }
 
 void CmdCopyTextureToSwapchain(CommandBuffer* cmd, Texture* src, Swapchain* dst)
 {
-    VkImageCopy region = {};
-    region.srcSubresource.aspectMask = GetAspectMask(src->format);
-    region.srcSubresource.mipLevel = 0;
-    region.srcSubresource.baseArrayLayer = 0;
-    region.srcSubresource.layerCount = 1;
-    region.srcOffset = {0, 0, 0};
-    region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    region.dstSubresource.mipLevel = 0;
-    region.dstSubresource.baseArrayLayer = 0;
-    region.dstSubresource.layerCount = 1;
-    region.dstOffset = {0, 0, 0};
-    region.extent.width = src->width;
-    region.extent.height = src->height;
-    region.extent.depth = 1;
+    VkImageBlit blit = {};
+    blit.srcSubresource.aspectMask = GetAspectMask(src->format);
+    blit.srcSubresource.mipLevel = 0;
+    blit.srcSubresource.baseArrayLayer = 0;
+    blit.srcSubresource.layerCount = 1;
+    blit.srcOffsets[0] = {0, 0, 0};
+    blit.srcOffsets[1] = {(int32_t)src->width, (int32_t)src->height, 1};
+
+    blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    blit.dstSubresource.mipLevel = 0;
+    blit.dstSubresource.baseArrayLayer = 0;
+    blit.dstSubresource.layerCount = 1;
+    blit.dstOffsets[0] = {0, 0, 0};
+    blit.dstOffsets[1] = {(int32_t)src->width, (int32_t)src->height, 1};
 
     VkImage dstImage = dst->images[dst->imageIndex];
-    vkCmdCopyImage(cmd->handle, src->handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                   dstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    vkCmdBlitImage(cmd->handle, src->handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dstImage,
+                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
 }
 
 void CmdBeginRenderPass(CommandBuffer* cmd, RenderPass* renderPass)
 {
-    auto toVkAttachment = [](const RenderPassAttachmentDesc& att, VkImageLayout layout, VkImageLayout resolveLayout) -> VkRenderingAttachmentInfo {
+    auto toVkAttachment = [](const RenderPassAttachmentDesc& att, VkImageLayout layout,
+                             VkImageLayout resolveLayout) -> VkRenderingAttachmentInfo {
         VkRenderingAttachmentInfo vkAtt = {};
         vkAtt.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
         vkAtt.imageView = att.texture->views[att.textureView].handle;
@@ -1512,23 +2189,26 @@ void CmdBeginRenderPass(CommandBuffer* cmd, RenderPass* renderPass)
     std::vector<VkRenderingAttachmentInfo> colorAttachments;
     for (uint32_t i = 0; i < RHI_MAX_ATTACHMENT_COUNT; ++i)
     {
-        if (!renderPass->desc.colors[i].texture) continue;
-        colorAttachments.push_back(toVkAttachment(renderPass->desc.colors[i],
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
+        if (!renderPass->desc.colors[i].texture)
+        {
+            continue;
+        }
+        colorAttachments.push_back(toVkAttachment(renderPass->desc.colors[i], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
     }
 
     std::optional<VkRenderingAttachmentInfo> depthAttachment;
     if (renderPass->desc.depth.texture)
     {
-        depthAttachment = toVkAttachment(renderPass->desc.depth,
-            VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+        depthAttachment = toVkAttachment(renderPass->desc.depth, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                                         VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
     }
 
     std::optional<VkRenderingAttachmentInfo> stencilAttachment;
     if (renderPass->desc.stencil.texture)
     {
-        stencilAttachment = toVkAttachment(renderPass->desc.stencil,
-            VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL);
+        stencilAttachment = toVkAttachment(renderPass->desc.stencil, VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL,
+                                           VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL);
     }
 
     VkRenderingInfo info = {};
@@ -1544,10 +2224,7 @@ void CmdBeginRenderPass(CommandBuffer* cmd, RenderPass* renderPass)
     vkCmdBeginRendering(cmd->handle, &info);
 }
 
-void CmdEndRenderPass(CommandBuffer* cmd)
-{
-    vkCmdEndRendering(cmd->handle);
-}
+void CmdEndRenderPass(CommandBuffer* cmd) { vkCmdEndRendering(cmd->handle); }
 
 void CmdSetScissor(CommandBuffer* cmd, int32_t left, int32_t top, int32_t right, int32_t bottom)
 {
@@ -1578,6 +2255,12 @@ void CmdBindPipeline(CommandBuffer* cmd, Pipeline* pipeline)
     cmd->table.bindings.clear();
 
     vkCmdBindPipeline(cmd->handle, pipeline->bindPoint, pipeline->handle);
+
+    if (pipeline->usesBindless)
+    {
+        vkCmdBindDescriptorSets(cmd->handle, pipeline->bindPoint, pipeline->pipelineLayout, 1, 1, &s_ctx.bindlessSet, 0,
+                                nullptr);
+    }
 }
 
 void CmdBindTexture(CommandBuffer* cmd, uint32_t binding, Texture* texture, int view)
@@ -1648,7 +2331,29 @@ void CmdBindSampler(CommandBuffer* cmd, uint32_t binding, Sampler* sampler)
     table.bindings[binding].images[0].sampler = sampler->handle;
 }
 
-void CmdBindVertexBuffers(CommandBuffer* cmd, uint32_t firstBinding, uint32_t bindingCount, Buffer** buffers, uint64_t* offsets)
+void CmdBindBufferByName(CommandBuffer* cmd, StringHash name, Buffer* buffer, uint64_t size, uint64_t offset)
+{
+    auto it = cmd->currentPipeline->nameToBinding.find(name);
+    assert(it != cmd->currentPipeline->nameToBinding.end());
+    CmdBindBuffer(cmd, it->second, buffer, size, offset);
+}
+
+void CmdBindTextureByName(CommandBuffer* cmd, StringHash name, Texture* texture, int view)
+{
+    auto it = cmd->currentPipeline->nameToBinding.find(name);
+    assert(it != cmd->currentPipeline->nameToBinding.end());
+    CmdBindTexture(cmd, it->second, texture, view);
+}
+
+void CmdBindSamplerByName(CommandBuffer* cmd, StringHash name, Sampler* sampler)
+{
+    auto it = cmd->currentPipeline->nameToBinding.find(name);
+    assert(it != cmd->currentPipeline->nameToBinding.end());
+    CmdBindSampler(cmd, it->second, sampler);
+}
+
+void CmdBindVertexBuffers(CommandBuffer* cmd, uint32_t firstBinding, uint32_t bindingCount, Buffer** buffers,
+                          uint64_t* offsets)
 {
     std::vector<VkBuffer> vkBuffers;
     std::vector<VkDeviceSize> vkOffsets;
@@ -1673,12 +2378,8 @@ void CmdBindIndexBuffer(CommandBuffer* cmd, Buffer* buffer, uint64_t offset, VkI
 
 void CmdPushConstants(CommandBuffer* cmd, const void* data, uint32_t size)
 {
-    vkCmdPushConstants(cmd->handle,
-                       cmd->currentPipeline->pipelineLayout,
-                       cmd->currentPipeline->pushConstants.stageFlags,
-                       0,
-                       size,
-                       data);
+    vkCmdPushConstants(cmd->handle, cmd->currentPipeline->pipelineLayout,
+                       cmd->currentPipeline->pushConstants.stageFlags, 0, size, data);
 }
 
 void FlushResourceBinding(CommandBuffer* cmd)
@@ -1735,24 +2436,22 @@ void FlushResourceBinding(CommandBuffer* cmd)
             case VK_DESCRIPTOR_TYPE_SAMPLER:
             case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
             case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-            case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
-            {
+            case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: {
                 write.pImageInfo = table.bindings[binding].images.data();
             }
             break;
             case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-            {
+            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: {
                 write.pBufferInfo = table.bindings[binding].buffers.data();
             }
             break;
-            default:
-                break;
+            default: break;
         }
     }
 
     vkUpdateDescriptorSets(s_ctx.device, (uint32_t)descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
-    vkCmdBindDescriptorSets(cmd->handle, pipeline->bindPoint, pipeline->pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+    vkCmdBindDescriptorSets(cmd->handle, pipeline->bindPoint, pipeline->pipelineLayout, 0, 1, &descriptorSet, 0,
+                            nullptr);
 }
 
 void CmdDraw(CommandBuffer* cmd, uint32_t vertexCount, uint32_t vertexOffset)
@@ -1761,7 +2460,8 @@ void CmdDraw(CommandBuffer* cmd, uint32_t vertexCount, uint32_t vertexOffset)
     vkCmdDraw(cmd->handle, vertexCount, 1, vertexOffset, 0);
 }
 
-void CmdDraw(CommandBuffer* cmd, uint32_t vertexCount, uint32_t instanceCount, uint32_t vertexOffset, uint32_t instanceOffset)
+void CmdDraw(CommandBuffer* cmd, uint32_t vertexCount, uint32_t instanceCount, uint32_t vertexOffset,
+             uint32_t instanceOffset)
 {
     FlushResourceBinding(cmd);
     vkCmdDraw(cmd->handle, vertexCount, instanceCount, vertexOffset, instanceOffset);
@@ -1773,7 +2473,8 @@ void CmdDrawIndexed(CommandBuffer* cmd, uint32_t indexCount, uint32_t indexOffse
     vkCmdDrawIndexed(cmd->handle, indexCount, 1, indexOffset, vertexOffset, 0);
 }
 
-void CmdDrawIndexed(CommandBuffer* cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t indexOffset, int32_t vertexOffset, uint32_t instanceOffset)
+void CmdDrawIndexed(CommandBuffer* cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t indexOffset,
+                    int32_t vertexOffset, uint32_t instanceOffset)
 {
     FlushResourceBinding(cmd);
     vkCmdDrawIndexed(cmd->handle, indexCount, instanceCount, indexOffset, vertexOffset, instanceOffset);
@@ -1803,7 +2504,8 @@ void CmdDispatchIndirect(CommandBuffer* cmd, Buffer* buffer, uint64_t offset)
     vkCmdDispatchIndirect(cmd->handle, buffer->handle, offset);
 }
 
-void SubmitBarriers(CommandBuffer* cmd, std::span<GenericBarrier> genericBarriers, std::span<BufferBarrier> bufferBarriers, std::span<ImageBarrier> imageBarriers)
+void SubmitBarriers(CommandBuffer* cmd, std::span<GenericBarrier> genericBarriers,
+                    std::span<BufferBarrier> bufferBarriers, std::span<ImageBarrier> imageBarriers)
 {
     if (genericBarriers.empty() && bufferBarriers.empty() && imageBarriers.empty())
     {
@@ -1858,7 +2560,7 @@ void SubmitBarriers(CommandBuffer* cmd, std::span<GenericBarrier> genericBarrier
         vkBarrier.newLayout = barrier.newLayout;
         vkBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         vkBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        
+
         if (barrier.swapchain)
         {
             vkBarrier.image = barrier.swapchain->images[barrier.swapchain->imageIndex];
@@ -1869,7 +2571,7 @@ void SubmitBarriers(CommandBuffer* cmd, std::span<GenericBarrier> genericBarrier
             vkBarrier.image = barrier.texture->handle;
             vkBarrier.subresourceRange.aspectMask = GetAspectMask(barrier.texture->format);
         }
-        
+
         vkBarrier.subresourceRange.baseMipLevel = 0;
         vkBarrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
         vkBarrier.subresourceRange.baseArrayLayer = 0;
@@ -1937,12 +2639,7 @@ void CmdPipelineBarrier(CommandBuffer* cmd, ImageBarrier imageBarrier)
 
 void CmdEndPipelineBarrier(CommandBuffer* cmd)
 {
-    SubmitBarriers(
-        cmd,
-        cmd->scopedGenericBarriers,
-        cmd->scopedBufferBarriers,
-        cmd->scopedImageBarriers
-    );
+    SubmitBarriers(cmd, cmd->scopedGenericBarriers, cmd->scopedBufferBarriers, cmd->scopedImageBarriers);
 
     cmd->inBarrierScope = false;
     cmd->scopedGenericBarriers.clear();
@@ -1961,18 +2658,13 @@ void Submit(CommandBuffer* cmd)
 void AcquireNextImage(Swapchain* swapchain)
 {
     uint32_t frameIndex = GetFrameIndex();
-    VK_ASSERT(vkAcquireNextImageKHR(s_ctx.device, swapchain->handle, UINT64_MAX, swapchain->acquireSemaphores[frameIndex], VK_NULL_HANDLE, &swapchain->imageIndex));
+    VK_ASSERT(vkAcquireNextImageKHR(s_ctx.device, swapchain->handle, UINT64_MAX,
+                                    swapchain->acquireSemaphores[frameIndex], VK_NULL_HANDLE, &swapchain->imageIndex));
 }
 
-void Present(Swapchain* swapchain)
-{
-    s_ctx.presentSwapchains.push_back(swapchain);
-}
+void Present(Swapchain* swapchain) { s_ctx.presentSwapchains.push_back(swapchain); }
 
-void WaitIdle()
-{
-    vkDeviceWaitIdle(s_ctx.device);
-}
+void WaitIdle() { vkDeviceWaitIdle(s_ctx.device); }
 
 void NextFrame()
 {
@@ -2072,4 +2764,54 @@ void NextFrame()
         UpdateResourceMgr(s_ctx.frameCount, RHI_MAX_FRAMES_IN_FLIGHT);
     }
 }
-} // namespace RHI
+
+uint32_t GetBindlessIndex(Buffer* buffer, VkBufferUsageFlags usage)
+{
+    if (!buffer)
+    {
+        return 0xFFFFFFFF;
+    }
+    if (usage == VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)
+    {
+        return buffer->bindlessIndexStorage;
+    }
+    assert(false && "Unsupported buffer bindless usage");
+    return 0xFFFFFFFF;
+}
+
+uint32_t GetBindlessIndex(Texture* texture, int view, VkImageUsageFlags usage)
+{
+    if (!texture || texture->views.empty())
+    {
+        return 0xFFFFFFFF;
+    }
+    if (view < 0 || view >= static_cast<int>(texture->views.size()))
+    {
+        return 0xFFFFFFFF;
+    }
+
+    if (usage & VK_IMAGE_USAGE_SAMPLED_BIT)
+    {
+        if (texture->imageType == VK_IMAGE_TYPE_3D)
+        {
+            return texture->views[view].bindlessIndexSampled3D;
+        }
+        return texture->views[view].bindlessIndexSampled;
+    }
+    else if (usage & VK_IMAGE_USAGE_STORAGE_BIT)
+    {
+        return texture->views[view].bindlessIndexStorage;
+    }
+    assert(false && "Unsupported texture bindless usage");
+    return 0xFFFFFFFF;
+}
+
+uint32_t GetBindlessIndex(Sampler* sampler)
+{
+    if (!sampler)
+    {
+        return 0xFFFFFFFF;
+    }
+    return sampler->bindlessIndexSampler;
+}
+}// namespace RHI

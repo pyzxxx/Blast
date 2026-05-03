@@ -17,6 +17,9 @@ struct MeshDrawCall
     RHI::Buffer* indexBuffer;
 };
 
-template<> void ExecuteDrawCall<MeshDrawCall>(RHI::CommandBuffer* cmd, const MeshDrawCall& drawCall);
+template<>
+void ExecuteDrawCall<MeshDrawCall>(RHI::CommandBuffer* cmd, const MeshDrawCall& drawCall);
 
 DRAW_LIST_DECLARE(OpaqueMeshList, MeshDrawCall)
+DRAW_LIST_DECLARE(MaskMeshList, MeshDrawCall)
+DRAW_LIST_DECLARE(BlendMeshList, MeshDrawCall)

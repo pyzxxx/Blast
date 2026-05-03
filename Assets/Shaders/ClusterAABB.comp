@@ -1,0 +1,72 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "ShaderInterop.h"
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 0) buffer Clusters
+{
+    Cluster clusters[];
+} s_clusters;
+
+layout(push_constant) uniform PC
+{
+    ClusterAABBPushConstants pc;
+};
+
+vec4 ClipToView(vec4 clip, mat4 invProj)
+{
+    vec4 view = invProj * clip;
+    view = view / view.w;
+    return view;
+}
+
+vec4 ScreenToView(vec4 screen, vec2 screenSize, mat4 invProj)
+{
+    vec2 texCoord = screen.xy / screenSize;
+    vec4 clip = vec4(texCoord * 2.0 - 1.0, screen.z, screen.w);
+    return ClipToView(clip, invProj);
+}
+
+vec3 RayIntersectZPlane(vec3 startPoint, vec3 endPoint, float zDistance)
+{
+    vec3 direction = endPoint - startPoint;
+    float denom = direction.z;
+    if (abs(denom) < 0.00001)
+    {
+        return vec3(0.0);
+    }
+    float t = (zDistance - startPoint.z) / denom;
+    return startPoint + t * direction;
+}
+
+void main()
+{
+    uint tileIndex = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * pc.clusterSize.x + gl_GlobalInvocationID.z * pc.clusterSize.x * pc.clusterSize.y;
+    vec2 tileSize = pc.screenSize / vec2(pc.clusterSize.xy);
+
+    vec2 minScreen = vec2(gl_GlobalInvocationID.xy) * tileSize;
+    vec2 maxScreen = (vec2(gl_GlobalInvocationID.xy) + 1.0) * tileSize;
+
+    vec3 minView = ScreenToView(vec4(minScreen, 0.0, 1.0), pc.screenSize, pc.invProj).xyz;
+    vec3 maxView = ScreenToView(vec4(maxScreen, 0.0, 1.0), pc.screenSize, pc.invProj).xyz;
+
+    float zNear = pc.zNearFar.x;
+    float zFar = pc.zNearFar.y;
+
+    float tileNear = -zNear * pow(zFar / zNear, float(gl_GlobalInvocationID.z) / float(pc.clusterSize.z));
+    float tileFar = -zNear * pow(zFar / zNear, float(gl_GlobalInvocationID.z + 1) / float(pc.clusterSize.z));
+
+    vec3 minNear = minView * (tileNear / minView.z);
+    vec3 minFar = minView * (tileFar / minView.z);
+    vec3 maxNear = maxView * (tileNear / maxView.z);
+    vec3 maxFar = maxView * (tileFar / maxView.z);
+
+    vec3 aabbMin = min(min(minNear, minFar), min(maxNear, maxFar));
+    vec3 aabbMax = max(max(minNear, minFar), max(maxNear, maxFar));
+
+    s_clusters.clusters[tileIndex].aabbMin = vec4(aabbMin, 0.0);
+    s_clusters.clusters[tileIndex].aabbMax = vec4(aabbMax, 0.0);
+    s_clusters.clusters[tileIndex].litBits = uvec4(0);
+}

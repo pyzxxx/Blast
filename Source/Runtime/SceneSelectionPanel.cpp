@@ -1,17 +1,12 @@
 #include "SceneSelectionPanel.h"
+#include "Foundation/Log.h"
+#include "Foundation/VFS.h"
 #include "SceneBrowser.h"
 #include "UserSettings.h"
 #include "World/World.h"
-#include "Foundation/Log.h"
-#include "Foundation/VFS.h"
 #include <imgui.h>
 
-SceneSelectionPanel::SceneSelectionPanel()
-    : m_selectedSceneIndex(-1)
-    , m_needsRefresh(true)
-{
-    RefreshSceneList();
-}
+SceneSelectionPanel::SceneSelectionPanel() : m_selectedSceneIndex(-1), m_needsRefresh(true) { RefreshSceneList(); }
 
 void SceneSelectionPanel::DrawContent()
 {
@@ -37,7 +32,7 @@ void SceneSelectionPanel::DrawContent()
 
     if (m_availableScenes.empty())
     {
-        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "No scenes found in Assets/Scene/");
+        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "No scenes found in Assets/Scenes/");
     }
     else
     {
@@ -113,7 +108,7 @@ void SceneSelectionPanel::LoadSelectedScene()
     }
 
     std::string sceneName = m_availableScenes[m_selectedSceneIndex];
-    std::string sceneDir = VFS::Join("Assets/Scene", sceneName);
+    std::string sceneDir = VFS::Join("Assets/Scenes", sceneName);
 
     World::Get()->Load(sceneDir);
     SceneBrowser::Get().SetCurrentScene(sceneName);
@@ -129,7 +124,7 @@ void SceneSelectionPanel::ReloadCurrentScene()
         return;
     }
 
-    std::string sceneDir = VFS::Join("Assets/Scene", currentScene);
+    std::string sceneDir = VFS::Join("Assets/Scenes", currentScene);
     World::Get()->Unload();
     World::Get()->Load(sceneDir);
     LOGI("SceneSelectionPanel: Reloaded scene directory '%s'", currentScene.c_str());

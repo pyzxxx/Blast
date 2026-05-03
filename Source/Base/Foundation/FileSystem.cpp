@@ -3,12 +3,8 @@
 #include <windows.h>
 #endif
 
-namespace FS
-{
-bool IsFile(const std::string& path)
-{
-    return std::filesystem::exists(path) && std::filesystem::is_regular_file(path);
-}
+namespace FS {
+bool IsFile(const std::string& path) { return std::filesystem::exists(path) && std::filesystem::is_regular_file(path); }
 
 bool IsDirectory(const std::string& path)
 {
@@ -33,10 +29,7 @@ void MakeDirectory(const std::string& path, bool recursive)
     }
 }
 
-bool RemoveFile(const std::string& path)
-{
-    return std::filesystem::remove(path);
-}
+bool RemoveFile(const std::string& path) { return std::filesystem::remove(path); }
 
 bool RemoveDirectory(const std::string& path, bool recursive)
 {
@@ -105,25 +98,13 @@ std::vector<std::string> ListDirectory(const std::string& path, const std::strin
     return files;
 }
 
-std::string Path::Extension(const std::string& path)
-{
-    return std::filesystem::path(path).extension().string();
-}
+std::string Path::Extension(const std::string& path) { return std::filesystem::path(path).extension().string(); }
 
-std::string Path::FileName(const std::string& path)
-{
-    return std::filesystem::path(path).stem().string();
-}
+std::string Path::FileName(const std::string& path) { return std::filesystem::path(path).stem().string(); }
 
-std::string Path::FullFileName(const std::string& path)
-{
-    return std::filesystem::path(path).filename().string();
-}
+std::string Path::FullFileName(const std::string& path) { return std::filesystem::path(path).filename().string(); }
 
-std::string Path::ParentPath(const std::string& path)
-{
-    return std::filesystem::path(path).parent_path().string();
-}
+std::string Path::ParentPath(const std::string& path) { return std::filesystem::path(path).parent_path().string(); }
 
 std::string Path::ExecutablePath()
 {
@@ -131,17 +112,17 @@ std::string Path::ExecutablePath()
 #if defined(_WIN32)
     char buffer[MAX_PATH];
     DWORD len = GetModuleFileNameA(nullptr, buffer, MAX_PATH);
-    if (len > 0) path = buffer;
+    if (len > 0)
+    {
+        path = buffer;
+    }
 #else
-    #error "Unsupported platform: ExecutablePath not implemented"
+#error "Unsupported platform: ExecutablePath not implemented"
 #endif
     return path;
 }
 
-std::string Path::ExecutableDir()
-{
-    return ParentPath(ExecutablePath());
-}
+std::string Path::ExecutableDir() { return ParentPath(ExecutablePath()); }
 
 File* File::Open(const std::string& path, FileMode mode, FileError* error)
 {
@@ -205,24 +186,21 @@ std::ios::openmode File::GetIosMode(FileMode mode) const
 {
     switch (mode)
     {
-        case FileMode::Read:
-            return std::ios::in | std::ios::binary;
-        case FileMode::Write:
-            return std::ios::out | std::ios::binary | std::ios::trunc;
-        case FileMode::ReadWrite:
-            return std::ios::in | std::ios::out | std::ios::binary;
-        case FileMode::WriteRead:
-            return std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc;
-        case FileMode::Append:
-            return std::ios::out | std::ios::binary | std::ios::app;
-        default:
-            return std::ios::in | std::ios::binary;
+        case FileMode::Read: return std::ios::in | std::ios::binary;
+        case FileMode::Write: return std::ios::out | std::ios::binary | std::ios::trunc;
+        case FileMode::ReadWrite: return std::ios::in | std::ios::out | std::ios::binary;
+        case FileMode::WriteRead: return std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc;
+        case FileMode::Append: return std::ios::out | std::ios::binary | std::ios::app;
+        default: return std::ios::in | std::ios::binary;
     }
 }
 
 void File::Seek(int64_t position)
 {
-    if (!IsOpen()) return;
+    if (!IsOpen())
+    {
+        return;
+    }
 
     m_stream.seekg(position, std::ios::beg);
     m_stream.seekp(position, std::ios::beg);
@@ -230,7 +208,10 @@ void File::Seek(int64_t position)
 
 void File::SeekEnd(int64_t offset)
 {
-    if (!IsOpen()) return;
+    if (!IsOpen())
+    {
+        return;
+    }
 
     m_stream.seekg(offset, std::ios::end);
     m_stream.seekp(offset, std::ios::end);
@@ -238,14 +219,20 @@ void File::SeekEnd(int64_t offset)
 
 size_t File::GetPosition()
 {
-    if (!IsOpen()) return 0;
+    if (!IsOpen())
+    {
+        return 0;
+    }
 
     return static_cast<size_t>(m_stream.tellg());
 }
 
 size_t File::GetSize()
 {
-    if (!IsOpen()) return 0;
+    if (!IsOpen())
+    {
+        return 0;
+    }
 
     auto current = m_stream.tellg();
     m_stream.seekg(0, std::ios::end);
@@ -254,14 +241,14 @@ size_t File::GetSize()
     return static_cast<size_t>(size);
 }
 
-bool File::IsEof() const
-{
-    return m_stream.eof();
-}
+bool File::IsEof() const { return m_stream.eof(); }
 
 size_t File::Read(uint8_t* buffer, size_t size)
 {
-    if (!IsOpen() || !buffer || size == 0) return 0;
+    if (!IsOpen() || !buffer || size == 0)
+    {
+        return 0;
+    }
 
     m_stream.read(reinterpret_cast<char*>(buffer), static_cast<std::streamsize>(size));
     return static_cast<size_t>(m_stream.gcount());
@@ -269,14 +256,20 @@ size_t File::Read(uint8_t* buffer, size_t size)
 
 void File::Write(const uint8_t* buffer, size_t size)
 {
-    if (!IsOpen() || !buffer) return;
+    if (!IsOpen() || !buffer)
+    {
+        return;
+    }
 
     m_stream.write(reinterpret_cast<const char*>(buffer), static_cast<std::streamsize>(size));
 }
 
 void File::Write(const std::string& text)
 {
-    if (!IsOpen()) return;
+    if (!IsOpen())
+    {
+        return;
+    }
 
     m_stream.write(text.data(), static_cast<std::streamsize>(text.size()));
 }
@@ -288,4 +281,4 @@ void File::Flush()
         m_stream.flush();
     }
 }
-} // namespace FS
+}// namespace FS

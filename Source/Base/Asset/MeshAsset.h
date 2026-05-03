@@ -1,9 +1,13 @@
 #pragma once
 
+#include "Acceleration/GpuBVHBuilder.h"
 #include "Asset.h"
+#include "Math/BoundingBox.h"
 #include "RHI/RHI.h"
 
 #include <string>
+
+class MaterialAsset;
 
 class MeshAsset : public Asset
 {
@@ -16,6 +20,8 @@ public:
         RHI::Buffer* positionBuffer = nullptr;
         RHI::Buffer* attributeBuffer = nullptr;
         RHI::Buffer* indexBuffer = nullptr;
+        MaterialAsset* materialAsset = nullptr;
+        GpuBVH gpuBVH;
     };
 
     MeshAsset(const std::string& assetPath);

@@ -1,22 +1,18 @@
 #include "World.h"
-#include "Model.h"
-#include "Camera.h"
 #include "Asset/AssetManager.h"
 #include "Asset/MeshAsset.h"
+#include "Camera.h"
 #include "Foundation/FileSystem.h"
 #include "Foundation/JsonIO.h"
 #include "Foundation/Log.h"
+#include "Light.h"
+#include "Model.h"
 
 #include <filesystem>
 
-void World::Initialize()
-{
-}
+void World::Initialize() {}
 
-void World::Terminate()
-{
-    Unload();
-}
+void World::Terminate() { Unload(); }
 
 void World::Load(const std::string& scenePath)
 {
@@ -54,7 +50,7 @@ void World::LoadSceneDirectory(const std::string& dirPath)
         LOGI("World: Loading scene file: %s", filePath.c_str());
         LoadSceneFile(filePath);
     }
-    
+
     if (!m_cameras.empty())
     {
         bool hasPrimary = false;
@@ -66,7 +62,7 @@ void World::LoadSceneDirectory(const std::string& dirPath)
                 break;
             }
         }
-        
+
         if (!hasPrimary)
         {
             CameraManager::Get()->SetPrimaryCamera(m_cameras[0]);
@@ -86,8 +82,7 @@ void World::LoadSceneFile(const std::string& filePath)
     std::unordered_map<std::string, Node*> localUuidToNode;
     std::unordered_map<std::string, std::string> hierarchy;
 
-    reader.Array("nodes", [&]()
-    {
+    reader.Array("nodes", [&]() {
         std::string type;
         std::string uuid;
         std::string parent;
@@ -122,29 +117,71 @@ void World::LoadSceneFile(const std::string& filePath)
         else if (type == "Camera")
         {
             Camera* camera = CameraManager::Get()->CreateCamera();
-            
+
             camera->SetLocalTranslation(translation);
             camera->SetLocalScale(scale);
             camera->SetLocalEuler(euler);
-            
+
             float fov = 60.0f;
             float nearPlane = 0.1f;
             float farPlane = 1000.0f;
-            
+
             reader.Field("fov", fov);
             reader.Field("nearPlane", nearPlane);
             reader.Field("farPlane", farPlane);
-            
+
             camera->SetPerspective(fov, nearPlane, farPlane);
-            
+
             m_cameras.push_back(camera);
-            
+
             bool isPrimary = false;
             if (reader.Field("isPrimary", isPrimary) && isPrimary)
             {
                 CameraManager::Get()->SetPrimaryCamera(camera);
             }
             localUuidToNode[uuid] = camera;
+            if (reader.Field("parent", parent))
+            {
+                hierarchy[uuid] = parent;
+            }
+        }
+        else if (type == "Light")
+        {
+            Light* light = LightManager::Get()->CreateLight();
+
+            light->SetLocalTranslation(translation);
+            light->SetLocalScale(scale);
+            light->SetLocalEuler(euler);
+
+            std::string lightType = "Point";
+            glm::vec3 color(1.0f);
+            float intensity = 1.0f;
+            float range = 5.0f;
+
+            reader.Field("lightType", lightType);
+            reader.Field("color", color);
+            reader.Field("intensity", intensity);
+            reader.Field("range", range);
+
+            if (lightType == "Point")
+            {
+                light->type = LightType::Point;
+            }
+            else if (lightType == "Spot")
+            {
+                light->type = LightType::Spot;
+            }
+            else if (lightType == "Direction")
+            {
+                light->type = LightType::Direction;
+            }
+
+            light->color = color;
+            light->intensity = intensity;
+            light->range = range;
+
+            m_lights.push_back(light);
+            localUuidToNode[uuid] = light;
             if (reader.Field("parent", parent))
             {
                 hierarchy[uuid] = parent;
@@ -165,7 +202,7 @@ void World::LoadSceneFile(const std::string& filePath)
     {
         auto childIter = m_uuidToNode.find(uuid);
         auto parentIter = m_uuidToNode.find(parentUuid);
-        
+
         if (childIter != m_uuidToNode.end() && parentIter != m_uuidToNode.end())
         {
             childIter->second->SetParent(parentIter->second);
@@ -180,12 +217,18 @@ void World::Unload()
         ModelManager::Get()->DestroyModel(model);
     }
     m_models.clear();
-    
+
     for (auto camera : m_cameras)
     {
         CameraManager::Get()->DestroyCamera(camera);
     }
     m_cameras.clear();
-    
+
+    for (auto light : m_lights)
+    {
+        LightManager::Get()->DestroyLight(light);
+    }
+    m_lights.clear();
+
     m_uuidToNode.clear();
 }

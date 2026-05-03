@@ -1,15 +1,10 @@
 #include "Camera.h"
-#include "Rendering/Renderer.h"
 #include "Rendering/RenderScene.h"
+#include "Rendering/Renderer.h"
 
 Camera::Camera()
-    : Node()
-    , m_projectionType(Perspective)
-    , m_fov(60.0f)
-    , m_nearPlane(0.1f)
-    , m_farPlane(1000.0f)
-    , m_orthoWidth(10.0f)
-    , m_orthoHeight(10.0f)
+    : Node(), m_projectionType(Perspective), m_fov(60.0f), m_nearPlane(0.1f), m_farPlane(1000.0f), m_orthoWidth(10.0f),
+      m_orthoHeight(10.0f)
 {
     RenderScene* scene = Renderer::Get()->GetScene();
     m_renderViewHandle = scene->renderViews.Add();
@@ -23,17 +18,22 @@ Camera::~Camera()
 
 void Camera::Update(float dt)
 {
-    (void)dt;
     RenderScene* scene = Renderer::Get()->GetScene();
     RenderView* view = scene->renderViews.Get(m_renderViewHandle);
-    
+
     view->viewMatrix = GetViewMatrix();
     view->projectionMatrix = GetProjectionMatrix(16.0f / 9.0f);
     view->viewProjection = view->projectionMatrix * view->viewMatrix;
     view->inverseView = glm::inverse(view->viewMatrix);
     view->inverseProjection = glm::inverse(view->projectionMatrix);
     view->cameraPosition = GetWorldTranslation();
-    
+    view->zNear = m_nearPlane;
+    view->zFar = m_farPlane;
+
+    float ev100 = log2f((m_aperture * m_aperture) / m_shutterSpeed * (100.0f / m_iso)) + m_ev100Compensation;
+    float maxLuminance = 1.2f * powf(2.0f, ev100);
+    view->exposure = 1.0f / glm::max(0.0001f, maxLuminance);
+
     if (m_isPrimary)
     {
         scene->SetPrimaryView(m_renderViewHandle);
@@ -75,10 +75,7 @@ glm::mat4 Camera::GetProjectionMatrix(float aspect)
     }
 }
 
-glm::mat4 Camera::GetViewMatrix()
-{
-    return glm::inverse(GetWorldTransform());
-}
+glm::mat4 Camera::GetViewMatrix() { return glm::inverse(GetWorldTransform()); }
 
 Camera* CameraManager::CreateCamera()
 {
@@ -108,7 +105,9 @@ Camera* CameraManager::GetPrimaryCamera()
     {
         Camera* camera = &m_pool[i];
         if (camera->IsPrimary())
+        {
             return camera;
+        }
     }
     return m_pool.Size() > 0 ? &m_pool[0] : nullptr;
 }
@@ -116,8 +115,10 @@ Camera* CameraManager::GetPrimaryCamera()
 void CameraManager::SetPrimaryCamera(Camera* camera)
 {
     if (!camera)
+    {
         return;
-    
+    }
+
     for (uint32_t i = 0; i < m_pool.Size(); ++i)
     {
         Camera* c = &m_pool[i];
@@ -126,7 +127,7 @@ void CameraManager::SetPrimaryCamera(Camera* camera)
             c->MarkPrimary(false);
         }
     }
-    
+
     camera->MarkPrimary(true);
 }
 

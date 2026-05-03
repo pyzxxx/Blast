@@ -1,6 +1,6 @@
 #include "UserSettings.h"
-#include "Foundation/JsonIO.h"
 #include "Foundation/FileSystem.h"
+#include "Foundation/JsonIO.h"
 #include "Foundation/Log.h"
 
 static std::string GetSettingsFilePath()
@@ -62,9 +62,7 @@ void UserSettings::Load()
 void UserSettings::Save()
 {
     JsonWriter writer;
-    writer.Object([&]() {
-        writer.Field("selectedScene", m_selectedScene);
-    });
+    writer.Object([&]() { writer.Field("selectedScene", m_selectedScene); });
 
     std::shared_ptr<FS::File> file(FS::File::Open(GetSettingsFilePath(), FS::FileMode::Write));
     if (!file)
@@ -78,10 +76,7 @@ void UserSettings::Save()
     file->Write((uint8_t*)data, size);
 }
 
-const std::string& UserSettings::GetSelectedScene() const
-{
-    return m_selectedScene;
-}
+const std::string& UserSettings::GetSelectedScene() const { return m_selectedScene; }
 
 void UserSettings::SetSelectedScene(const std::string& scenePath)
 {

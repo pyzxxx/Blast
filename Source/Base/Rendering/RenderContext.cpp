@@ -1,10 +1,7 @@
 #include "RenderContext.h"
 #include <cstring>
 
-RenderContext::RenderContext()
-{
-    InitializeSamplers();
-}
+RenderContext::RenderContext() { InitializeSamplers(); }
 
 RenderContext::~RenderContext()
 {
@@ -60,13 +57,12 @@ RHI::Buffer* RenderContext::GetBuffer(const std::string& name)
     return nullptr;
 }
 
-RHI::Buffer* RenderContext::CreateBuffer(const std::string& name, const RHI::BufferDesc& desc, std::function<void(RHI::Buffer*)> initCallback)
+RHI::Buffer* RenderContext::CreateBuffer(const std::string& name, const RHI::BufferDesc& desc,
+                                         std::function<void(RHI::Buffer*)> initCallback)
 {
     auto compareBufferDesc = [](const RHI::BufferDesc& a, const RHI::BufferDesc& b) -> bool {
-        return a.size == b.size &&
-            a.dynamicBuffer == b.dynamicBuffer &&
-            a.memoryUsage == b.memoryUsage &&
-            a.bufferUsage == b.bufferUsage;
+        return a.size == b.size && a.dynamicBuffer == b.dynamicBuffer && a.memoryUsage == b.memoryUsage
+            && a.bufferUsage == b.bufferUsage;
     };
 
     RHI::Buffer* buffer = GetBuffer(name);
@@ -99,18 +95,13 @@ RHI::Texture* RenderContext::GetTexture(const std::string& name)
     return nullptr;
 }
 
-RHI::Texture* RenderContext::CreateTexture(const std::string& name, const RHI::TextureDesc& desc, std::function<void(RHI::Texture*)> initCallback)
+RHI::Texture* RenderContext::CreateTexture(const std::string& name, const RHI::TextureDesc& desc,
+                                           std::function<void(RHI::Texture*)> initCallback)
 {
     auto compareTextureDesc = [](const RHI::TextureDesc& a, const RHI::TextureDesc& b) -> bool {
-        return a.width == b.width &&
-            a.height == b.height &&
-            a.depth == b.depth &&
-            a.levels == b.levels &&
-            a.layers == b.layers &&
-            a.format == b.format &&
-            a.imageType == b.imageType &&
-            a.usage == b.usage &&
-            a.samples == b.samples;
+        return a.width == b.width && a.height == b.height && a.depth == b.depth && a.levels == b.levels
+            && a.layers == b.layers && a.format == b.format && a.imageType == b.imageType && a.usage == b.usage
+            && a.samples == b.samples;
     };
 
     RHI::Texture* texture = GetTexture(name);
@@ -145,77 +136,70 @@ RHI::Pipeline* RenderContext::GetGraphicsPipeline(const std::string& name)
 
 RHI::Pipeline* RenderContext::CreateGraphicsPipeline(const std::string& name, const RHI::GraphicsPipelineDesc& desc)
 {
-    auto compareGraphicsPipelineDesc = [](const RHI::GraphicsPipelineDesc& a, const RHI::GraphicsPipelineDesc& b) -> bool {
-        if (a.vertexShader != b.vertexShader ||
-            a.fragmentShader != b.fragmentShader ||
-            a.renderPass != b.renderPass)
+    auto compareGraphicsPipelineDesc = [](const RHI::GraphicsPipelineDesc& a,
+                                          const RHI::GraphicsPipelineDesc& b) -> bool {
+        if (a.vertexShader != b.vertexShader || a.fragmentShader != b.fragmentShader || a.renderPass != b.renderPass)
         {
             return false;
         }
 
         for (uint32_t i = 0; i < RHI_MAX_VERTEX_BUFFER_COUNT; ++i)
         {
-            if (a.vertexLayout.bindings[i].stride != b.vertexLayout.bindings[i].stride ||
-                a.vertexLayout.bindings[i].inputRate != b.vertexLayout.bindings[i].inputRate)
+            if (a.vertexLayout.bindings[i].stride != b.vertexLayout.bindings[i].stride
+                || a.vertexLayout.bindings[i].inputRate != b.vertexLayout.bindings[i].inputRate)
             {
                 return false;
             }
         }
         for (uint32_t i = 0; i < RHI_MAX_VERTEX_ATTRIB_COUNT; ++i)
         {
-            if (a.vertexLayout.attributes[i].binding != b.vertexLayout.attributes[i].binding ||
-                a.vertexLayout.attributes[i].offset != b.vertexLayout.attributes[i].offset ||
-                a.vertexLayout.attributes[i].format != b.vertexLayout.attributes[i].format)
+            if (a.vertexLayout.attributes[i].binding != b.vertexLayout.attributes[i].binding
+                || a.vertexLayout.attributes[i].offset != b.vertexLayout.attributes[i].offset
+                || a.vertexLayout.attributes[i].format != b.vertexLayout.attributes[i].format)
             {
                 return false;
             }
         }
 
-        if (a.blendState.blendEnable != b.blendState.blendEnable ||
-            a.blendState.srcColor != b.blendState.srcColor ||
-            a.blendState.dstColor != b.blendState.dstColor ||
-            a.blendState.colorOp != b.blendState.colorOp ||
-            a.blendState.srcAlpha != b.blendState.srcAlpha ||
-            a.blendState.dstAlpha != b.blendState.dstAlpha ||
-            a.blendState.alphaOp != b.blendState.alphaOp)
+        if (a.blendState.blendEnable != b.blendState.blendEnable || a.blendState.srcColor != b.blendState.srcColor
+            || a.blendState.dstColor != b.blendState.dstColor || a.blendState.colorOp != b.blendState.colorOp
+            || a.blendState.srcAlpha != b.blendState.srcAlpha || a.blendState.dstAlpha != b.blendState.dstAlpha
+            || a.blendState.alphaOp != b.blendState.alphaOp)
         {
             return false;
         }
 
-        if (a.depthState.depthTest != b.depthState.depthTest ||
-            a.depthState.depthWrite != b.depthState.depthWrite ||
-            a.depthState.depthFunc != b.depthState.depthFunc)
+        if (a.depthState.depthTest != b.depthState.depthTest || a.depthState.depthWrite != b.depthState.depthWrite
+            || a.depthState.depthFunc != b.depthState.depthFunc)
         {
             return false;
         }
 
-        if (a.stencilState.stencilTest != b.stencilState.stencilTest ||
-            a.stencilState.stencilReadMask != b.stencilState.stencilReadMask ||
-            a.stencilState.stencilWriteMask != b.stencilState.stencilWriteMask ||
-            a.stencilState.frontStencilFailOp != b.stencilState.frontStencilFailOp ||
-            a.stencilState.frontStencilDepthFailOp != b.stencilState.frontStencilDepthFailOp ||
-            a.stencilState.frontStencilPassOp != b.stencilState.frontStencilPassOp ||
-            a.stencilState.frontStencilFunc != b.stencilState.frontStencilFunc ||
-            a.stencilState.backStencilFailOp != b.stencilState.backStencilFailOp ||
-            a.stencilState.backStencilDepthFailOp != b.stencilState.backStencilDepthFailOp ||
-            a.stencilState.backStencilPassOp != b.stencilState.backStencilPassOp ||
-            a.stencilState.backStencilFunc != b.stencilState.backStencilFunc)
+        if (a.stencilState.stencilTest != b.stencilState.stencilTest
+            || a.stencilState.stencilReadMask != b.stencilState.stencilReadMask
+            || a.stencilState.stencilWriteMask != b.stencilState.stencilWriteMask
+            || a.stencilState.frontStencilFailOp != b.stencilState.frontStencilFailOp
+            || a.stencilState.frontStencilDepthFailOp != b.stencilState.frontStencilDepthFailOp
+            || a.stencilState.frontStencilPassOp != b.stencilState.frontStencilPassOp
+            || a.stencilState.frontStencilFunc != b.stencilState.frontStencilFunc
+            || a.stencilState.backStencilFailOp != b.stencilState.backStencilFailOp
+            || a.stencilState.backStencilDepthFailOp != b.stencilState.backStencilDepthFailOp
+            || a.stencilState.backStencilPassOp != b.stencilState.backStencilPassOp
+            || a.stencilState.backStencilFunc != b.stencilState.backStencilFunc)
         {
             return false;
         }
 
-        if (a.multisampleState.sampleShading != b.multisampleState.sampleShading ||
-            a.multisampleState.alphaToCoverage != b.multisampleState.alphaToCoverage ||
-            a.multisampleState.alphaToOne != b.multisampleState.alphaToOne ||
-            a.multisampleState.samples != b.multisampleState.samples)
+        if (a.multisampleState.sampleShading != b.multisampleState.sampleShading
+            || a.multisampleState.alphaToCoverage != b.multisampleState.alphaToCoverage
+            || a.multisampleState.alphaToOne != b.multisampleState.alphaToOne
+            || a.multisampleState.samples != b.multisampleState.samples)
         {
             return false;
         }
 
-        if (a.fillMode != b.fillMode ||
-            a.topology != b.topology ||
-            a.frontFace != b.frontFace ||
-            a.cullMode != b.cullMode)
+        if (a.fillMode != b.fillMode || a.topology != b.topology || a.frontFace != b.frontFace
+            || a.cullMode != b.cullMode)
         {
             return false;
         }
@@ -281,27 +265,30 @@ RHI::RenderPass* RenderContext::GetRenderPass(const std::string& name)
 
 RHI::RenderPass* RenderContext::CreateRenderPass(const std::string& name, const RHI::RenderPassDesc& desc)
 {
-    auto compareAttachmentDesc = [](const RHI::RenderPassAttachmentDesc& a, const RHI::RenderPassAttachmentDesc& b) -> bool {
-        return a.texture == b.texture &&
-               a.textureView == b.textureView &&
-               a.resolveTexture == b.resolveTexture &&
-               a.resolveTextureView == b.resolveTextureView &&
-               a.resolveMode == b.resolveMode &&
-               a.loadOp == b.loadOp &&
-               a.storeOp == b.storeOp;
+    auto compareAttachmentDesc = [](const RHI::RenderPassAttachmentDesc& a,
+                                    const RHI::RenderPassAttachmentDesc& b) -> bool {
+        return a.texture == b.texture && a.textureView == b.textureView && a.resolveTexture == b.resolveTexture
+            && a.resolveTextureView == b.resolveTextureView && a.resolveMode == b.resolveMode && a.loadOp == b.loadOp
+            && a.storeOp == b.storeOp;
     };
 
     auto compareRenderPassDesc = [&](const RHI::RenderPassDesc& a, const RHI::RenderPassDesc& b) -> bool {
         if (!compareAttachmentDesc(a.depth, b.depth))
+        {
             return false;
+        }
 
         if (!compareAttachmentDesc(a.stencil, b.stencil))
+        {
             return false;
+        }
 
         for (uint32_t i = 0; i < RHI_MAX_ATTACHMENT_COUNT; ++i)
         {
             if (!compareAttachmentDesc(a.colors[i], b.colors[i]))
+            {
                 return false;
+            }
         }
 
         return true;
@@ -324,22 +311,32 @@ RHI::RenderPass* RenderContext::CreateRenderPass(const std::string& name, const 
 
 void RenderContext::InitializeSamplers()
 {
-    auto createSampler = [&](const std::string& name, VkFilter filter, VkSamplerAddressMode addressMode) {
+    auto createSampler = [&](const std::string& name, VkFilter filter, VkSamplerMipmapMode mipmapMode,
+                             VkSamplerAddressMode addressMode) {
         RHI::EzSamplerDesc desc = {};
         desc.magFilter = filter;
         desc.minFilter = filter;
+        desc.mipmapMode = mipmapMode;
         desc.addressU = addressMode;
         desc.addressV = addressMode;
         desc.addressW = addressMode;
         RHI::Sampler* sampler = nullptr;
         RHI::CreateSampler(desc, sampler);
+        RHI::CreateBindless(sampler);
         m_samplerCache[name] = sampler;
     };
 
-    createSampler("linearWrap", VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
-    createSampler("linearClamp", VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
-    createSampler("nearestWrap", VK_FILTER_NEAREST, VK_SAMPLER_ADDRESS_MODE_REPEAT);
-    createSampler("nearestClamp", VK_FILTER_NEAREST, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+    createSampler("linearClamp", VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+    createSampler("linearRepeat", VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+    createSampler("nearestClamp", VK_FILTER_NEAREST, VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+    createSampler("nearestRepeat", VK_FILTER_NEAREST, VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+    createSampler("linearMirror", VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT);
+    createSampler("nearestMirror", VK_FILTER_NEAREST, VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT);
+    createSampler("linearMipmapLinearClamp", VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+    createSampler("linearMipmapLinearRepeat", VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+    createSampler("linearMipmapNearestRepeat", VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_NEAREST, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+    createSampler("nearestMipmapLinearRepeat", VK_FILTER_NEAREST, VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+    createSampler("nearestMipmapNearestRepeat", VK_FILTER_NEAREST, VK_SAMPLER_MIPMAP_MODE_NEAREST, VK_SAMPLER_ADDRESS_MODE_REPEAT);
 }
 
 RHI::Sampler* RenderContext::GetSampler(const std::string& name) const

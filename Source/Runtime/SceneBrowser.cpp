@@ -10,17 +10,16 @@ SceneBrowser& SceneBrowser::Get()
 std::vector<std::string> SceneBrowser::GetAvailableScenes()
 {
     std::vector<std::string> scenes;
-    const std::string sceneDir = "Assets/Scene";
 
-    if (!VFS::IsDirectory(sceneDir))
+    if (!VFS::IsDirectory(s_sceneDirectory))
     {
         return scenes;
     }
 
-    std::vector<std::string> entries = VFS::ListDirectory(sceneDir);
+    std::vector<std::string> entries = VFS::ListDirectory(s_sceneDirectory);
     for (const auto& entry : entries)
     {
-        std::string fullPath = VFS::Join(sceneDir, entry);
+        std::string fullPath = VFS::Join(s_sceneDirectory, entry);
         if (!VFS::IsDirectory(fullPath))
         {
             continue;
@@ -46,12 +45,6 @@ std::vector<std::string> SceneBrowser::GetAvailableScenes()
     return scenes;
 }
 
-void SceneBrowser::SetCurrentScene(const std::string& sceneName)
-{
-    m_currentScene = sceneName;
-}
+void SceneBrowser::SetCurrentScene(const std::string& sceneName) { m_currentScene = sceneName; }
 
-const std::string& SceneBrowser::GetCurrentScene() const
-{
-    return m_currentScene;
-}
+const std::string& SceneBrowser::GetCurrentScene() const { return m_currentScene; }

@@ -14,6 +14,9 @@ add_library(cgltf INTERFACE)
 target_include_directories(cgltf INTERFACE ${EXTERN_DIR}/cgltf)
 target_link_libraries(Tools PUBLIC cgltf)
 
+# stb_image (header only)
+target_include_directories(Tools PUBLIC ${EXTERN_DIR}/stb)
+
 set_target_properties(Tools PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${BINARY_DIR}"
 )

@@ -1,9 +1,7 @@
 #include "AssetManager.h"
 #include "Foundation/FileSystem.h"
 
-void AssetManager::Initialize()
-{
-}
+void AssetManager::Initialize() {}
 
 void AssetManager::Terminate()
 {
@@ -33,5 +31,3 @@ Asset* AssetManager::GetAsset(const std::string& assetPath)
     }
     return nullptr;
 }
-
-

@@ -1,0 +1,95 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "ShaderInterop.h"
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 0) readonly buffer PointLights
+{
+    PunctualLight lights[];
+} s_pointLights;
+
+layout(std430, binding = 1) readonly buffer SpotLights
+{
+    PunctualLight lights[];
+} s_spotLights;
+
+layout(std430, binding = 2) readonly buffer DirLights
+{
+    DirectionLight lights[];
+} s_dirLights;
+
+layout(std430, binding = 3) buffer Clusters
+{
+    Cluster clusters[];
+} s_clusters;
+
+layout(push_constant) uniform PC
+{
+    ClusteringPushConstants pc;
+};
+
+bool SphereAABBIntersect(vec3 sphereCenter, float radius, vec3 aabbMin, vec3 aabbMax)
+{
+    vec3 closestPoint = clamp(sphereCenter, aabbMin, aabbMax);
+    float distSq = dot(closestPoint - sphereCenter, closestPoint - sphereCenter);
+    return distSq <= (radius * radius);
+}
+
+vec4 BoundingSphere(vec3 origin, vec3 forward, float size, float angle)
+{
+    vec4 sphere;
+    float halfAngle = angle * 0.5;
+    if (halfAngle > 0.78539816339) // PI / 4
+    {
+        sphere.w = tan(halfAngle) * size;
+        sphere.xyz = origin + forward * size;
+    }
+    else
+    {
+        sphere.w = size / (2.0 * cos(halfAngle));
+        sphere.xyz = origin + forward * sphere.w;
+    }
+    return sphere;
+}
+
+void main()
+{
+    uvec3 clusterIndex = gl_GlobalInvocationID;
+    uint clusterIdx = clusterIndex.x + clusterIndex.y * pc.clusterSize.x + clusterIndex.z * pc.clusterSize.x * pc.clusterSize.y;
+
+    Cluster cluster = s_clusters.clusters[clusterIdx];
+    vec3 aabbMin = cluster.aabbMin.xyz;
+    vec3 aabbMax = cluster.aabbMax.xyz;
+
+    uint pointLightBits = 0u;
+    uint spotLightBits = 0u;
+
+    for (uint i = 0u; i < pc.lightCount.x && i < 32u; ++i)
+    {
+        PunctualLight light = s_pointLights.lights[i];
+        vec3 lightPosView = (pc.viewMatrix * vec4(light.position, 1.0)).xyz;
+        float radius = 1.0 / light.invRadius;
+
+        if (SphereAABBIntersect(lightPosView, radius, aabbMin, aabbMax))
+        {
+            pointLightBits |= (1u << i);
+        }
+    }
+
+    for (uint i = 0u; i < pc.lightCount.y && i < 32u; ++i)
+    {
+        PunctualLight light = s_spotLights.lights[i];
+        vec4 sphere = BoundingSphere(light.position, light.direction, 1.0 / light.invRadius, light.coneAngle);
+        vec4 sphereView = pc.viewMatrix * vec4(sphere.xyz, 1.0);
+
+        if (SphereAABBIntersect(sphereView.xyz, sphere.w, aabbMin, aabbMax))
+        {
+            spotLightBits |= (1u << i);
+        }
+    }
+
+    s_clusters.clusters[clusterIdx].litBits.x = pointLightBits;
+    s_clusters.clusters[clusterIdx].litBits.y = spotLightBits;
+}

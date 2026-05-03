@@ -1,12 +1,10 @@
 #include "ShaderCache.h"
 
+#include "Foundation/FileSystem.h"
 #include "Foundation/Hash.h"
 #include "Foundation/VFS.h"
-#include "Foundation/FileSystem.h"
 
-void ShaderCache::Initialize()
-{
-}
+void ShaderCache::Initialize() {}
 
 void ShaderCache::Terminate()
 {
@@ -53,6 +51,13 @@ RHI::Shader* ShaderCache::GetShader(const std::string& path, const std::vector<s
     return shader;
 }
 
+RHI::Shader* ShaderCache::GetShader(ShaderId id)
+{
+    uint32_t baseIndex = GetShaderBaseIndex(id);
+    std::vector<std::string> macros = GetShaderMacros(id);
+    return GetShader(kShaderPaths[baseIndex], macros);
+}
+
 void ShaderCache::Compile(const std::string& path, const std::vector<std::string>& macros, void** data, uint32_t& size)
 {
     std::string fileName = VFS::FullFileName(path);
@@ -74,8 +79,9 @@ void ShaderCache::Compile(const std::string& path, const std::vector<std::string
     std::string commandLine;
     commandLine += glslangValidator;
 
-    char buff[256];
-    sprintf(buff, R"( -V "%s" --target-env vulkan1.3 -o "%s")", realPath.c_str(), outFilePath.c_str());
+    char buff[512];
+    sprintf(buff, R"( -V -I"%s" "%s" --target-env vulkan1.3 -o "%s")", parentPath.c_str(), realPath.c_str(),
+            outFilePath.c_str());
     commandLine += buff;
 
     for (const auto& macro : macros)
@@ -101,5 +107,3 @@ void ShaderCache::Compile(const std::string& path, const std::vector<std::string
     *data = nullptr;
     size = 0;
 }
-
-

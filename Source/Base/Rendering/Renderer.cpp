@@ -4,8 +4,11 @@ void Renderer::Initialize()
 {
     m_ctx = new RenderContext();
     m_scene = new RenderScene();
+    m_lightClusterPass = new LightClusterPass();
     m_opacityPass = new OpacityPass();
+    m_alphaPass = new AlphaPass();
     m_compositePass = new CompositePass();
+    m_bvhDebugPass = new BVHDebugPass();
 }
 
 void Renderer::Terminate()
@@ -16,8 +19,11 @@ void Renderer::Terminate()
         m_swapchain = nullptr;
     }
 
+    delete m_bvhDebugPass;
     delete m_compositePass;
+    delete m_alphaPass;
     delete m_opacityPass;
+    delete m_lightClusterPass;
     delete m_scene;
     delete m_ctx;
 }
@@ -47,17 +53,23 @@ void Renderer::RemoveExtension(RenderExtension* extension)
 {
     auto it = std::find(m_extensions.begin(), m_extensions.end(), extension);
     if (it != m_extensions.end())
+    {
         m_extensions.erase(it);
+    }
 }
 
 void Renderer::Render()
 {
     if (!m_swapchain)
+    {
         return;
+    }
 
     RHI::SwapchainStatus swapchainStatus = RHI::UpdateSwapchain(m_swapchain);
     if (swapchainStatus == RHI::SwapchainStatus::NotReady)
+    {
         return;
+    }
 
     if (m_ctx->m_width != m_swapchain->width || m_ctx->m_height != m_swapchain->height)
     {
@@ -85,11 +97,10 @@ void Renderer::Setup(RHI::CommandBuffer* cmd)
     outputDesc.width = m_ctx->m_width;
     outputDesc.height = m_ctx->m_height;
     outputDesc.format = VK_FORMAT_R8G8B8A8_UNORM;
-    outputDesc.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    outputDesc.usage =
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
 
     m_ctx->CreateTexture("output", outputDesc, [&](RHI::Texture* texture) {
-        RHI::CreateTextureView(texture, VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1);
-
         RHI::ImageBarrier barrier = {};
         barrier.texture = texture;
         barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -103,8 +114,11 @@ void Renderer::Setup(RHI::CommandBuffer* cmd)
 
     m_scene->Setup(m_ctx, cmd);
 
+    m_lightClusterPass->Setup(m_ctx, cmd);
     m_opacityPass->Setup(m_ctx, cmd);
+    m_alphaPass->Setup(m_ctx, cmd);
     m_compositePass->Setup(m_ctx, cmd);
+    m_bvhDebugPass->Setup(m_ctx, cmd);
 
     for (auto* ext : m_extensions)
     {
@@ -120,11 +134,18 @@ void Renderer::Setup(RHI::CommandBuffer* cmd)
     perFrameData.inverseView = primaryView.inverseView;
     perFrameData.inverseProjection = primaryView.inverseProjection;
     perFrameData.cameraPosition = glm::vec4(primaryView.cameraPosition, 1.0f);
+    perFrameData.zNearFar = glm::vec2(primaryView.zNear, primaryView.zFar);
+    perFrameData.exposure = primaryView.exposure;
+    perFrameData.lightCount =
+        glm::uvec4((uint32_t)m_scene->GetPointLights().Size(), (uint32_t)m_scene->GetSpotLights().Size(),
+                   (uint32_t)m_scene->GetDirectionLights().Size(), 0);
+    perFrameData.clusterSize = m_ctx->GetClusterSize();
+    perFrameData.screenSize = m_ctx->GetScreenSize();
 
     RHI::BufferDesc perFrameDesc = {};
     perFrameDesc.bufferUsage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
     perFrameDesc.memoryUsage = VMA_MEMORY_USAGE_CPU_ONLY;
-    perFrameDesc.size = sizeof(PerFrameData);
+    perFrameDesc.size = ((sizeof(PerFrameData) + 63) / 64) * 64;
     perFrameDesc.dynamicBuffer = true;
     RHI::Buffer* perFrameBuffer = m_ctx->CreateBuffer("perFrame", perFrameDesc);
 
@@ -145,8 +166,11 @@ void Renderer::Execute(RHI::CommandBuffer* cmd)
 {
     RHI::Texture* output = m_ctx->GetTexture("output");
 
+    m_lightClusterPass->Execute(m_ctx, cmd);
     m_opacityPass->Execute(m_ctx, cmd);
+    m_alphaPass->Execute(m_ctx, cmd);
     m_compositePass->Execute(m_ctx, cmd);
+    m_bvhDebugPass->Execute(m_ctx, cmd);
 
     for (auto* ext : m_extensions)
     {

@@ -28,6 +28,7 @@ public:
     size_t Capacity() const { return m_objects.capacity(); }
 
     T* Data() { return m_objects.data(); }
+    const T* Data() const { return m_objects.data(); }
 
     template<typename... Args>
     uint32_t Add(Args&&... args)
@@ -43,7 +44,10 @@ public:
     void Remove(uint32_t handle)
     {
         auto it = m_lookup.find(handle);
-        if (it == m_lookup.end()) return;
+        if (it == m_lookup.end())
+        {
+            return;
+        }
 
         uint32_t index = it->second;
         uint32_t lastIndex = static_cast<uint32_t>(m_objects.size()) - 1;

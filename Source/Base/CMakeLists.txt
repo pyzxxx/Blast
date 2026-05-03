@@ -8,6 +8,12 @@ add_library(Base STATIC ${SOURCE_FILES})
 # Precompiled Header
 target_precompile_headers(Base PRIVATE PCH.h)
 
+# Base source directory for Runtime access
+target_include_directories(Base PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Shader interop headers for C++/GLSL shared definitions
+target_include_directories(Base PUBLIC ${ASSETS_DIR}/Shaders)
+
 # glm
 target_include_directories(Base PUBLIC ${EXTERN_DIR}/glm)
 target_compile_definitions(Base PUBLIC
@@ -39,3 +45,6 @@ target_link_libraries(Base PUBLIC Vulkan-Headers)
 add_library(vma INTERFACE)
 target_include_directories(vma INTERFACE ${EXTERN_DIR}/VulkanMemoryAllocator)
 target_link_libraries(Base PUBLIC vma)
+
+# stb_image (header only)
+target_include_directories(Base PUBLIC ${EXTERN_DIR}/stb)

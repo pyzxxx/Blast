@@ -2,14 +2,12 @@
 
 #include "PCH.h"
 
-namespace FS
-{
+namespace FS {
 enum class FileMode;
 class File;
-} // namespace FS
+}// namespace FS
 
-namespace VFS
-{
+namespace VFS {
 void Mount(const std::string& virtualPath, const std::string& physicalPath);
 
 FS::File* Open(const std::string& path, FS::FileMode mode);
@@ -35,4 +33,4 @@ std::string Join(const std::string& a, const std::string& b, Args&&... rest)
 {
     return Join(Join(a, b), std::forward<Args>(rest)...);
 }
-} // namespace VFS
+}// namespace VFS

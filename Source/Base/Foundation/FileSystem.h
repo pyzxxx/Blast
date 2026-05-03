@@ -2,8 +2,7 @@
 
 #include "PCH.h"
 
-namespace FS
-{
+namespace FS {
 enum class FileError
 {
     OK = 0,
@@ -26,7 +25,8 @@ void DuplicateFile(const std::string& from, const std::string& to);
 void MakeDirectory(const std::string& path, bool recursive = true);
 bool RemoveFile(const std::string& path);
 bool RemoveDirectory(const std::string& path, bool recursive);
-std::vector<std::string> ListDirectory(const std::string& path, const std::string& extension = "", bool recursive = false);
+std::vector<std::string> ListDirectory(const std::string& path, const std::string& extension = "",
+                                       bool recursive = false);
 
 class Path
 {
@@ -81,4 +81,4 @@ private:
     FileMode m_mode = FileMode::Read;
     mutable std::vector<char> m_buffer;
 };
-} // namespace FS
+}// namespace FS

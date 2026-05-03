@@ -21,11 +21,11 @@ private:
 private:
     Camera* m_camera = nullptr;
 
-    float m_movementSpeed = 3.0f;
+    float m_movementSpeed = 1.0f;
     float m_mouseSensitivity = 0.002f;
 
-    float m_smoothSpeed = 15.0f;
-    float m_rotationSmoothSpeed = 20.0f;
+    float m_smoothSpeed = 40.0f;
+    float m_rotationSmoothSpeed = 50.0f;
 
     glm::vec3 m_targetPosition;
     float m_targetYaw = 0.0f;

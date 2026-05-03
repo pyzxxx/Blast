@@ -1,5 +1,5 @@
-#include "Importer.h"
 #include "Foundation/VFS.h"
+#include "Importer.h"
 
 int main(int argc, char* argv[])
 {

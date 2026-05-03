@@ -10,3 +10,4 @@
 - [volk](https://github.com/zeux/volk)
 - [Vulkan-Headers](https://github.com/KhronosGroup/Vulkan-Headers)
 - [VulkanMemoryAllocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator)
+- [xatlas](https://github.com/jpcy/xatlas)

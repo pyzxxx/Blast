@@ -7,29 +7,29 @@
 #endif
 
 // Standard Library
-#include <cstdint>
-#include <cassert>
-#include <vector>
+#include <algorithm>
 #include <array>
+#include <cassert>
+#include <cstdint>
+#include <deque>
+#include <filesystem>
+#include <fstream>
+#include <functional>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <random>
+#include <regex>
+#include <set>
+#include <span>
+#include <sstream>
+#include <stack>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
-#include <memory>
-#include <map>
-#include <algorithm>
-#include <functional>
-#include <optional>
-#include <set>
-#include <span>
-#include <stack>
-#include <deque>
-#include <mutex>
-#include <random>
-#include <regex>
-#include <fstream>
-#include <sstream>
-#include <iostream>
-#include <filesystem>
+#include <vector>
 
 // GLM
 #include <glm/glm.hpp>

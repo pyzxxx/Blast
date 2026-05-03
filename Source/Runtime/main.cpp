@@ -1,13 +1,14 @@
 #include "BaseModules.h"
-#include "RuntimeModules.h"
 #include "Foundation/Module.h"
 #include "Foundation/VFS.h"
-#include "Rendering/Renderer.h"
-#include "Window.h"
+#include "Foundation/Var.h"
 #include "ImGuiRenderer.h"
-#include "UserSettings.h"
-#include "World/World.h"
+#include "Rendering/Renderer.h"
+#include "RuntimeModules.h"
 #include "SceneBrowser.h"
+#include "UserSettings.h"
+#include "Window.h"
+#include "World/World.h"
 
 int main()
 {
@@ -20,15 +21,15 @@ int main()
     RegisterRuntimeModules();
     ModuleRegistry::Get().InitializeAll();
 
+    Renderer::Get()->SetWindow(window.GetNativeHandle());
+
     std::string selectedScene = UserSettings::Get().GetSelectedScene();
     if (!selectedScene.empty())
     {
-        std::string sceneDir = VFS::Join("Assets/Scene", selectedScene);
+        std::string sceneDir = VFS::Join("Assets/Scenes", selectedScene);
         World::Get()->Load(sceneDir);
         SceneBrowser::Get().SetCurrentScene(selectedScene);
     }
-
-    Renderer::Get()->SetWindow(window.GetNativeHandle());
 
     ImGuiRenderer* imguiRenderer = new ImGuiRenderer();
     Renderer::Get()->AddExtension(imguiRenderer);

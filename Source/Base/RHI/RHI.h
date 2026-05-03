@@ -1,28 +1,29 @@
 #pragma once
 
-#include "PCH.h"
 #include "Foundation/Log.h"
+#include "Foundation/StringHash.h"
+#include "PCH.h"
 
 #ifdef _WIN32
 #define VK_USE_PLATFORM_WIN32_KHR
 #endif
 
 #define VK_NO_PROTOTYPES
-#include <vulkan/vulkan.h>
-#include <volk.h>
-#include <vk_mem_alloc.h>
 #include <spirv_reflect.h>
+#include <vk_mem_alloc.h>
+#include <volk.h>
+#include <vulkan/vulkan.h>
 
 #define VK_DEBUG
 
-#define VK_ASSERT(x)                                              \
-    do                                                            \
-    {                                                             \
-        if (x != VK_SUCCESS)                                      \
-        {                                                         \
+#define VK_ASSERT(x)                                            \
+    do                                                          \
+    {                                                           \
+        if (x != VK_SUCCESS)                                    \
+        {                                                       \
             LOGE("Vulkan error at %s:%d.", __FILE__, __LINE__); \
-            abort();                                              \
-        }                                                         \
+            abort();                                            \
+        }                                                       \
     } while (0)
 
 #define RHI_MAX_FRAMES_IN_FLIGHT 3
@@ -31,8 +32,7 @@
 #define RHI_MAX_VERTEX_ATTRIB_COUNT 8
 #define RHI_MAX_BINDING_COUNT 32
 
-namespace RHI
-{
+namespace RHI {
 struct BufferDesc
 {
     size_t size;
@@ -50,10 +50,12 @@ struct Buffer
 
     size_t size;
     VmaMemoryUsage memoryUsage;
+    VkBufferUsageFlags bufferUsage = 0;
 
     bool dynamicBuffer = false;
     uint32_t currentWriteIndex;
     uint64_t lastWriteFrame;
+    uint32_t bindlessIndexStorage = 0xFFFFFFFF;
 };
 
 struct StageAllocation
@@ -79,6 +81,9 @@ struct TextureView
 {
     VkImageView handle;
     VkImageSubresourceRange subresourceRange;
+    uint32_t bindlessIndexSampled = 0xFFFFFFFF;
+    uint32_t bindlessIndexSampled3D = 0xFFFFFFFF;
+    uint32_t bindlessIndexStorage = 0xFFFFFFFF;
 };
 
 struct Texture
@@ -89,8 +94,10 @@ struct Texture
     uint32_t levels;
     uint32_t layers;
     VkFormat format;
+    VkImageType imageType = VK_IMAGE_TYPE_2D;
     VkImage handle;
     VmaAllocation allocation = VK_NULL_HANDLE;
+    VkImageUsageFlags usage = 0;
     std::vector<TextureView> views;
 };
 
@@ -123,6 +130,7 @@ struct EzSamplerDesc
 struct Sampler
 {
     VkSampler handle = VK_NULL_HANDLE;
+    uint32_t bindlessIndexSampler = 0xFFFFFFFF;
 };
 
 struct Shader
@@ -132,6 +140,7 @@ struct Shader
     VkPushConstantRange pushConstants = {};
     SpvReflectShaderModule reflect = {};
     std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
+    std::unordered_map<StringHash, uint32_t> nameToBinding;
 };
 
 struct RenderPassAttachmentDesc
@@ -250,6 +259,8 @@ struct Pipeline
     VkPushConstantRange pushConstants = {};
     std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
     std::unordered_map<uint32_t, uint32_t> bindingToIndexMap;
+    std::unordered_map<StringHash, uint32_t> nameToBinding;
+    bool usesBindless = false;
 };
 
 enum class SwapchainStatus
@@ -347,8 +358,7 @@ StageAllocation RequestStageBuffer(size_t size);
 
 void CreateTexture(const TextureDesc& desc, Texture*& texture);
 void DestroyTexture(Texture* texture);
-int CreateTextureView(Texture* texture, VkImageViewType view_type, VkImageAspectFlags aspect_mask,
-                      uint32_t base_level, uint32_t level_count,
+int CreateTextureView(Texture* texture, VkImageViewType view_type, uint32_t base_level, uint32_t level_count,
                       uint32_t base_layer, uint32_t layer_count);
 
 void CreateSampler(const EzSamplerDesc& desc, Sampler*& sampler);
@@ -372,7 +382,8 @@ CommandBuffer* RequestCommandBuffer();
 
 void CmdCopyBuffer(CommandBuffer* cmd, Buffer* src, Buffer* dst, VkBufferCopy range);
 void CmdUploadBuffer(CommandBuffer* cmd, Buffer* buffer, uint32_t size, uint32_t offset, void* data);
-void CmdCopyBufferToTexture(CommandBuffer* cmd, Buffer* src, Texture* dst, uint32_t srcOffset, const TextureRegion& region);
+void CmdCopyBufferToTexture(CommandBuffer* cmd, Buffer* src, Texture* dst, uint32_t srcOffset,
+                            const TextureRegion& region);
 void CmdUploadTexture(CommandBuffer* cmd, Texture* texture, const TextureRegion& region, void* data);
 void CmdCopyTexture(CommandBuffer* cmd, Texture* src, Texture* dst);
 void CmdCopyTextureToSwapchain(CommandBuffer* cmd, Texture* src, Swapchain* dst);
@@ -380,20 +391,29 @@ void CmdCopyTextureToSwapchain(CommandBuffer* cmd, Texture* src, Swapchain* dst)
 void CmdBeginRenderPass(CommandBuffer* cmd, RenderPass* renderPass);
 void CmdEndRenderPass(CommandBuffer* cmd);
 void CmdSetScissor(CommandBuffer* cmd, int32_t left, int32_t top, int32_t right, int32_t bottom);
-void CmdSetViewport(CommandBuffer* cmd, float x, float y, float w, float h, float minDepth = 0.0f, float maxDepth = 1.0f);
+void CmdSetViewport(CommandBuffer* cmd, float x, float y, float w, float h, float minDepth = 0.0f,
+                    float maxDepth = 1.0f);
 
 void CmdBindPipeline(CommandBuffer* cmd, Pipeline* pipeline);
 void CmdBindTexture(CommandBuffer* cmd, uint32_t binding, Texture* texture, int view = 0);
 void CmdBindBuffer(CommandBuffer* cmd, uint32_t binding, Buffer* buffer, uint64_t size = 0, uint64_t offset = 0);
 void CmdBindSampler(CommandBuffer* cmd, uint32_t binding, Sampler* sampler);
-void CmdBindVertexBuffers(CommandBuffer* cmd, uint32_t firstBinding, uint32_t bindingCount, Buffer** buffers, uint64_t* offsets = nullptr);
-void CmdBindIndexBuffer(CommandBuffer* cmd, Buffer* buffer, uint64_t offset = 0, VkIndexType indexType = VK_INDEX_TYPE_UINT32);
+void CmdBindVertexBuffers(CommandBuffer* cmd, uint32_t firstBinding, uint32_t bindingCount, Buffer** buffers,
+                          uint64_t* offsets = nullptr);
+void CmdBindIndexBuffer(CommandBuffer* cmd, Buffer* buffer, uint64_t offset = 0,
+                        VkIndexType indexType = VK_INDEX_TYPE_UINT32);
 void CmdPushConstants(CommandBuffer* cmd, const void* data, uint32_t size);
 
+void CmdBindBufferByName(CommandBuffer* cmd, StringHash name, Buffer* buffer, uint64_t size = 0, uint64_t offset = 0);
+void CmdBindTextureByName(CommandBuffer* cmd, StringHash name, Texture* texture, int view = 0);
+void CmdBindSamplerByName(CommandBuffer* cmd, StringHash name, Sampler* sampler);
+
 void CmdDraw(CommandBuffer* cmd, uint32_t vertexCount, uint32_t vertexOffset);
-void CmdDraw(CommandBuffer* cmd, uint32_t vertexCount, uint32_t instanceCount, uint32_t vertexOffset, uint32_t instanceOffset);
+void CmdDraw(CommandBuffer* cmd, uint32_t vertexCount, uint32_t instanceCount, uint32_t vertexOffset,
+             uint32_t instanceOffset);
 void CmdDrawIndexed(CommandBuffer* cmd, uint32_t indexCount, uint32_t indexOffset, int32_t vertexOffset);
-void CmdDrawIndexed(CommandBuffer* cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t indexOffset, int32_t vertexOffset, uint32_t instanceOffset);
+void CmdDrawIndexed(CommandBuffer* cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t indexOffset,
+                    int32_t vertexOffset, uint32_t instanceOffset);
 void CmdDrawIndirect(CommandBuffer* cmd, Buffer* buffer, uint64_t offset, uint32_t drawCount, uint32_t stride);
 void CmdDrawIndexedIndirect(CommandBuffer* cmd, Buffer* buffer, uint64_t offset, uint32_t drawCount, uint32_t stride);
 void CmdDispatch(CommandBuffer* cmd, uint32_t threadGroupX, uint32_t threadGroupY, uint32_t threadGroupZ);
@@ -410,6 +430,14 @@ void Submit(CommandBuffer* cmd);
 void AcquireNextImage(Swapchain* swapchain);
 void Present(Swapchain* swapchain);
 
+uint32_t GetBindlessIndex(Texture* texture, int view = 0, VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT);
+uint32_t GetBindlessIndex(Sampler* sampler);
+uint32_t GetBindlessIndex(Buffer* buffer, VkBufferUsageFlags usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+
+void CreateBindless(Texture* texture, int view = 0, VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT);
+void CreateBindless(Sampler* sampler);
+void CreateBindless(Buffer* buffer, VkBufferUsageFlags usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+
 void WaitIdle();
 void NextFrame();
-} // namespace RHI
+}// namespace RHI

@@ -1,7 +1,17 @@
 #include "Model.h"
+#include "Asset/MaterialAsset.h"
 #include "Asset/MeshAsset.h"
-#include "Rendering/Renderer.h"
 #include "Rendering/MeshRendering.h"
+#include "Rendering/Renderer.h"
+
+static MaterialBlendMode GetMaterialBlendMode(MaterialAsset* material)
+{
+    if (!material)
+    {
+        return MaterialBlendMode::Opaque;
+    }
+    return material->GetBlendMode();
+}
 
 Model::Model()
 {
@@ -14,11 +24,17 @@ Model::~Model()
 {
     RenderScene* scene = Renderer::Get()->GetScene();
     scene->gpuScene.Remove(m_gpuSceneHandle);
+    for (uint32_t handle : m_bvhInstanceHandles)
+    {
+        scene->RemoveBVHInstance(handle);
+    }
+    m_bvhInstanceHandles.clear();
 }
+
+void Model::DirtyTransform() {}
 
 void Model::Update(float dt)
 {
-    (void)dt;
     Renderer* renderer = Renderer::Get();
     RenderScene* scene = renderer->GetScene();
     GpuSceneNode* node = scene->gpuScene.Get(m_gpuSceneHandle);
@@ -26,22 +42,70 @@ void Model::Update(float dt)
 
     if (meshAsset)
     {
+        if (meshAsset != m_lastMeshAsset)
+        {
+            for (uint32_t handle : m_bvhInstanceHandles)
+            {
+                scene->RemoveBVHInstance(handle);
+            }
+            m_bvhInstanceHandles.clear();
+
+            for (auto& primitive : meshAsset->GetPrimitives())
+            {
+                if (primitive.gpuBVH.nodeCount > 0)
+                {
+                    uint32_t handle = scene->AddBVHInstance(&primitive.gpuBVH, GetWorldTransform());
+                    m_bvhInstanceHandles.push_back(handle);
+                }
+            }
+
+            m_lastMeshAsset = meshAsset;
+        }
+        else
+        {
+            for (uint32_t handle : m_bvhInstanceHandles)
+            {
+                scene->UpdateBVHInstance(handle, GetWorldTransform());
+            }
+        }
+
         for (auto& primitive : meshAsset->GetPrimitives())
         {
             MeshDrawCall drawCall = {};
             drawCall.sceneIndex = m_gpuSceneIndex;
-            drawCall.materialIndex = 0;
-            
+            drawCall.materialIndex = primitive.materialAsset ? primitive.materialAsset->GetGpuMaterialIndex() : 0;
+
             drawCall.vertexCount = primitive.vertexCount;
             drawCall.indexCount = primitive.indexCount;
             drawCall.using16uIndex = (primitive.indexType == VK_INDEX_TYPE_UINT16);
-            
+
             drawCall.positionBuffer = primitive.positionBuffer;
             drawCall.attributeBuffer = primitive.attributeBuffer;
             drawCall.indexBuffer = primitive.indexBuffer;
-            
-            renderer->AddDrawCall<OpaqueMeshList>(drawCall);
+
+            MaterialBlendMode blendMode = GetMaterialBlendMode(primitive.materialAsset);
+            if (blendMode == MaterialBlendMode::Mask)
+            {
+                renderer->AddDrawCall<MaskMeshList>(drawCall);
+            }
+            else if (blendMode == MaterialBlendMode::Blend)
+            {
+                renderer->AddDrawCall<BlendMeshList>(drawCall);
+            }
+            else
+            {
+                renderer->AddDrawCall<OpaqueMeshList>(drawCall);
+            }
         }
+    }
+    else if (m_lastMeshAsset)
+    {
+        for (uint32_t handle : m_bvhInstanceHandles)
+        {
+            scene->RemoveBVHInstance(handle);
+        }
+        m_bvhInstanceHandles.clear();
+        m_lastMeshAsset = nullptr;
     }
 }
 
@@ -66,5 +130,3 @@ void ModelManager::Update(float dt)
         m_pool[i].Update(dt);
     }
 }
-
-

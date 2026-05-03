@@ -1,7 +1,8 @@
 #pragma once
 
-#include "RHI/RHI.h"
 #include "Foundation/Module.h"
+#include "RHI/RHI.h"
+#include "ShaderRegistry.h"
 
 class ShaderCache : public Module<ShaderCache>
 {
@@ -11,6 +12,7 @@ public:
 
     RHI::Shader* GetShader(const std::string& path);
     RHI::Shader* GetShader(const std::string& path, const std::vector<std::string>& macros);
+    RHI::Shader* GetShader(ShaderId id);
 
 private:
     static void Compile(const std::string& path, const std::vector<std::string>& macros, void** data, uint32_t& size);

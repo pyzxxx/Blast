@@ -1,4 +1,5 @@
 #include "MeshRendering.h"
+#include "ShaderSchema.h"
 
 template<>
 void ExecuteDrawCall<MeshDrawCall>(RHI::CommandBuffer* cmd, const MeshDrawCall& drawCall)
@@ -9,15 +10,12 @@ void ExecuteDrawCall<MeshDrawCall>(RHI::CommandBuffer* cmd, const MeshDrawCall& 
     VkIndexType indexType = drawCall.using16uIndex ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
     RHI::CmdBindIndexBuffer(cmd, drawCall.indexBuffer, 0, indexType);
 
-    struct PushConstants
-    {
-        uint32_t sceneIndex;
-        uint32_t materialIndex;
-    };
-    PushConstants pushData = {drawCall.sceneIndex, drawCall.materialIndex};
-    RHI::CmdPushConstants(cmd, &pushData, sizeof(PushConstants));
+    MeshPushConstants pushData = {drawCall.sceneIndex, drawCall.materialIndex};
+    RHI::CmdPushConstants(cmd, &pushData, sizeof(MeshPushConstants));
 
     RHI::CmdDrawIndexed(cmd, drawCall.indexCount, 0, 0);
 }
 
 DRAW_LIST_IMPLEMENT(OpaqueMeshList, MeshDrawCall)
+DRAW_LIST_IMPLEMENT(MaskMeshList, MeshDrawCall)
+DRAW_LIST_IMPLEMENT(BlendMeshList, MeshDrawCall)

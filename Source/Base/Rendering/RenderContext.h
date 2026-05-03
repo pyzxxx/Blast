@@ -12,10 +12,12 @@ public:
     uint32_t GetHeight() const { return m_height; }
 
     RHI::Buffer* GetBuffer(const std::string& name);
-    RHI::Buffer* CreateBuffer(const std::string& name, const RHI::BufferDesc& desc, std::function<void(RHI::Buffer*)> initCallback = nullptr);
+    RHI::Buffer* CreateBuffer(const std::string& name, const RHI::BufferDesc& desc,
+                              std::function<void(RHI::Buffer*)> initCallback = nullptr);
 
     RHI::Texture* GetTexture(const std::string& name);
-    RHI::Texture* CreateTexture(const std::string& name, const RHI::TextureDesc& desc, std::function<void(RHI::Texture*)> initCallback = nullptr);
+    RHI::Texture* CreateTexture(const std::string& name, const RHI::TextureDesc& desc,
+                                std::function<void(RHI::Texture*)> initCallback = nullptr);
 
     RHI::Pipeline* GetGraphicsPipeline(const std::string& name);
     RHI::Pipeline* CreateGraphicsPipeline(const std::string& name, const RHI::GraphicsPipelineDesc& desc);
@@ -28,12 +30,18 @@ public:
 
     RHI::Sampler* GetSampler(const std::string& name) const;
 
+    void SetClusterSize(const glm::uvec4& size) { m_clusterSize = size; }
+    glm::uvec4 GetClusterSize() const { return m_clusterSize; }
+
+    glm::uvec2 GetScreenSize() const { return glm::uvec2(m_width, m_height); }
+
 private:
     void InitializeSamplers();
     friend class Renderer;
 
     uint32_t m_width = 0;
     uint32_t m_height = 0;
+    glm::uvec4 m_clusterSize = glm::uvec4(12, 12, 12, 0);
 
     std::unordered_map<std::string, RHI::Buffer*> m_bufferCache;
     std::unordered_map<std::string, RHI::BufferDesc> m_bufferDescCache;

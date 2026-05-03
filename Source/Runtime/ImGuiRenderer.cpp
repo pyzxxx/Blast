@@ -1,7 +1,7 @@
 #include "ImGuiRenderer.h"
+#include "Foundation/FileSystem.h"
 #include "Rendering/RenderContext.h"
 #include "Rendering/ShaderCache.h"
-#include "Foundation/FileSystem.h"
 #include "imgui.h"
 
 ImGuiRenderer::ImGuiRenderer()
@@ -18,7 +18,7 @@ ImGuiRenderer::ImGuiRenderer()
     textureDesc.format = VK_FORMAT_R8G8B8A8_UNORM;
     textureDesc.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     RHI::CreateTexture(textureDesc, m_fontTexture);
-    RHI::CreateTextureView(m_fontTexture, VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1);
+    RHI::CreateBindless(m_fontTexture);
 
     RHI::EzSamplerDesc samplerDesc = {};
     samplerDesc.magFilter = VK_FILTER_LINEAR;
@@ -26,6 +26,7 @@ ImGuiRenderer::ImGuiRenderer()
     samplerDesc.addressU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     samplerDesc.addressV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     RHI::CreateSampler(samplerDesc, m_fontSampler);
+    RHI::CreateBindless(m_fontSampler);
 
     io.Fonts->SetTexID((ImTextureID)(intptr_t)m_fontTexture);
 
@@ -61,9 +62,13 @@ ImGuiRenderer::ImGuiRenderer()
 ImGuiRenderer::~ImGuiRenderer()
 {
     if (m_fontSampler)
+    {
         RHI::DestroySampler(m_fontSampler);
+    }
     if (m_fontTexture)
+    {
         RHI::DestroyTexture(m_fontTexture);
+    }
 }
 
 void ImGuiRenderer::Setup(RenderContext* ctx, RHI::CommandBuffer* cmd)
@@ -76,8 +81,8 @@ void ImGuiRenderer::Setup(RenderContext* ctx, RHI::CommandBuffer* cmd)
     renderPassDesc.colors[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     RHI::RenderPass* renderPass = ctx->CreateRenderPass("imguiRenderPass", renderPassDesc);
 
-    RHI::Shader* vertexShader = ShaderCache::Get()->GetShader("Assets/Shader/Imgui.vert");
-    RHI::Shader* fragmentShader = ShaderCache::Get()->GetShader("Assets/Shader/Imgui.frag");
+    RHI::Shader* vertexShader = ShaderCache::Get()->GetShader(ShaderId::ImguiVert);
+    RHI::Shader* fragmentShader = ShaderCache::Get()->GetShader(ShaderId::ImguiFrag);
 
     RHI::GraphicsPipelineDesc desc = {};
     desc.vertexShader = vertexShader;
@@ -101,13 +106,17 @@ void ImGuiRenderer::Setup(RenderContext* ctx, RHI::CommandBuffer* cmd)
     m_drawCmdCount = 0;
 
     if (!drawData || drawData->TotalVtxCount == 0)
+    {
         return;
+    }
 
     uint32_t fbWidth = ctx->GetWidth();
     uint32_t fbHeight = ctx->GetHeight();
 
     if (fbWidth == 0 || fbHeight == 0)
+    {
         return;
+    }
 
     m_projMatrix = glm::ortho(0.0f, drawData->DisplaySize.x, 0.0f, drawData->DisplaySize.y, -1.0f, 1.0f);
 
@@ -161,8 +170,14 @@ void ImGuiRenderer::Setup(RenderContext* ctx, RHI::CommandBuffer* cmd)
 
                 if (clipRect.x < fbWidth && clipRect.y < fbHeight && clipRect.z >= 0.0f && clipRect.w >= 0.0f)
                 {
-                    if (clipRect.x < 0.0f) clipRect.x = 0.0f;
-                    if (clipRect.y < 0.0f) clipRect.y = 0.0f;
+                    if (clipRect.x < 0.0f)
+                    {
+                        clipRect.x = 0.0f;
+                    }
+                    if (clipRect.y < 0.0f)
+                    {
+                        clipRect.y = 0.0f;
+                    }
 
                     ImGuiDrawCmd drawCmd;
                     drawCmd.elemCount = pcmd->ElemCount;
@@ -187,7 +202,9 @@ void ImGuiRenderer::Setup(RenderContext* ctx, RHI::CommandBuffer* cmd)
 void ImGuiRenderer::Execute(RenderContext* ctx, RHI::CommandBuffer* cmd)
 {
     if (m_drawCmdCount == 0)
+    {
         return;
+    }
 
     RHI::Pipeline* pipeline = ctx->GetGraphicsPipeline("imgui");
     RHI::RenderPass* renderPass = ctx->GetRenderPass("imguiRenderPass");
@@ -199,8 +216,8 @@ void ImGuiRenderer::Execute(RenderContext* ctx, RHI::CommandBuffer* cmd)
     RHI::CmdSetViewport(cmd, 0, 0, (float)fbWidth, (float)fbHeight, 0.0f, 1.0f);
     RHI::CmdSetScissor(cmd, 0, 0, fbWidth, fbHeight);
 
-    RHI::CmdBindTexture(cmd, 1, m_fontTexture);
-    RHI::CmdBindSampler(cmd, 1, m_fontSampler);
+    RHI::CmdBindTextureByName(cmd, "u_texture"_sh, m_fontTexture);
+    RHI::CmdBindSamplerByName(cmd, "u_texture"_sh, m_fontSampler);
 
     RHI::Buffer* vertexBuffer = ctx->GetBuffer("imguiVertexBuffer");
     RHI::Buffer* indexBuffer = ctx->GetBuffer("imguiIndexBuffer");
@@ -215,11 +232,8 @@ void ImGuiRenderer::Execute(RenderContext* ctx, RHI::CommandBuffer* cmd)
     {
         const ImGuiDrawCmd& drawCmd = m_drawCmds[i];
 
-        RHI::CmdSetScissor(cmd,
-            (int32_t)drawCmd.clipRect[0],
-            (int32_t)drawCmd.clipRect[1],
-            (int32_t)drawCmd.clipRect[2],
-            (int32_t)drawCmd.clipRect[3]);
+        RHI::CmdSetScissor(cmd, (int32_t)drawCmd.clipRect[0], (int32_t)drawCmd.clipRect[1],
+                           (int32_t)drawCmd.clipRect[2], (int32_t)drawCmd.clipRect[3]);
 
         RHI::CmdDrawIndexed(cmd, drawCmd.elemCount, drawCmd.idxOffset, drawCmd.vtxOffset);
     }

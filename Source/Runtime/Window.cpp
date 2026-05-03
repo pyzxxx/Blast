@@ -1,11 +1,13 @@
 #include "Window.h"
-#include "Panel.h"
-#include "SceneSelectionPanel.h"
 #include "CameraPanel.h"
+#include "DebugPanel.h"
+#include "Foundation/Log.h"
 #include "Input/Input.h"
 #include "Input/InputKey.h"
 #include "Input/InputMouseButton.h"
-#include "Foundation/Log.h"
+#include "LightPanel.h"
+#include "Panel.h"
+#include "SceneSelectionPanel.h"
 
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3.h>
@@ -139,12 +141,12 @@ static InputMouseButton ConvertGLFWToInputMouseButton(int glfwButton)
     }
 }
 
-Window::Window(uint32_t width, uint32_t height, const char* title)
-    : m_width(width)
-    , m_height(height)
+Window::Window(uint32_t width, uint32_t height, const char* title) : m_width(width), m_height(height)
 {
     m_panels.push_back(std::make_unique<SceneSelectionPanel>());
     m_panels.push_back(std::make_unique<CameraPanel>());
+    m_panels.push_back(std::make_unique<LightPanel>());
+    m_panels.push_back(std::make_unique<DebugPanel>());
 
     m_glfwWindow = glfwCreateWindow(width, height, title, nullptr, nullptr);
     m_nativeHandle = glfwGetWin32Window(m_glfwWindow);
@@ -196,27 +198,20 @@ void Window::InitializeImGui()
     io.Fonts->AddFontDefault();
 }
 
-bool Window::ShouldClose() const
-{
-    return glfwWindowShouldClose(m_glfwWindow);
-}
+bool Window::ShouldClose() const { return glfwWindowShouldClose(m_glfwWindow); }
 
-void Window::PollEvents()
-{
-    glfwPollEvents();
-}
+void Window::PollEvents() { glfwPollEvents(); }
 
-double Window::GetTime() const
-{
-    return glfwGetTime();
-}
+double Window::GetTime() const { return glfwGetTime(); }
 
 void Window::NewFrame(float dt)
 {
     int w, h;
     glfwGetWindowSize(m_glfwWindow, &w, &h);
     if (w <= 0 || h <= 0)
+    {
         return;
+    }
     m_width = w;
     m_height = h;
     ImGui::SetCurrentContext(m_imguiContext);
@@ -245,10 +240,7 @@ void Window::InitializeGLFW()
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 }
 
-void Window::TerminateGLFW()
-{
-    glfwTerminate();
-}
+void Window::TerminateGLFW() { glfwTerminate(); }
 
 void Window::WindowSizeCallback(GLFWwindow* window, int width, int height)
 {
@@ -261,9 +253,13 @@ void Window::KeyCallback(GLFWwindow* window, int key, int scancode, int action, 
 {
     ImGuiIO& io = ImGui::GetIO();
     if (action == GLFW_PRESS)
+    {
         io.KeysDown[key] = true;
+    }
     if (action == GLFW_RELEASE)
+    {
         io.KeysDown[key] = false;
+    }
     io.KeyCtrl = io.KeysDown[GLFW_KEY_LEFT_CONTROL] || io.KeysDown[GLFW_KEY_RIGHT_CONTROL];
     io.KeyShift = io.KeysDown[GLFW_KEY_LEFT_SHIFT] || io.KeysDown[GLFW_KEY_RIGHT_SHIFT];
     io.KeyAlt = io.KeysDown[GLFW_KEY_LEFT_ALT] || io.KeysDown[GLFW_KEY_RIGHT_ALT];
@@ -280,9 +276,13 @@ void Window::MouseButtonCallback(GLFWwindow* window, int button, int action, int
 {
     ImGuiIO& io = ImGui::GetIO();
     if (action == GLFW_PRESS && button >= 0 && button < IM_ARRAYSIZE(io.MouseDown))
+    {
         io.MouseDown[button] = true;
+    }
     if (action == GLFW_RELEASE && button >= 0 && button < IM_ARRAYSIZE(io.MouseDown))
+    {
         io.MouseDown[button] = false;
+    }
     InputMouseButton inputButton = ConvertGLFWToInputMouseButton(button);
     if (inputButton != InputMouseButton::Invalid)
     {

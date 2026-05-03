@@ -4,7 +4,8 @@
 #include "RHI/RHI.h"
 
 class RenderContext;
-template<class T> class DrawListWapper;
+template<class T>
+class DrawListWapper;
 
 template<typename T>
 void ExecuteDrawCall(RHI::CommandBuffer* cmd, const T& drawCall)
@@ -30,10 +31,7 @@ public:
         }
     }
 
-    static void AddList(DrawList* list)
-    {
-        GetAllLists().push_back(list);
-    }
+    static void AddList(DrawList* list) { GetAllLists().push_back(list); }
 
     static void RemoveList(DrawList* list)
     {
@@ -62,15 +60,9 @@ class DrawListWapper : public DrawList
 public:
     using DrawCallType = T;
 
-    void Add(const T& drawCall)
-    {
-        m_drawCalls.push_back(drawCall);
-    }
+    void Add(const T& drawCall) { m_drawCalls.push_back(drawCall); }
 
-    void Clear() override
-    {
-        m_drawCalls.clear();
-    }
+    void Clear() override { m_drawCalls.clear(); }
 
     void Execute(RHI::CommandBuffer* cmd) override
     {
@@ -84,19 +76,19 @@ private:
     std::vector<T> m_drawCalls;
 };
 
-#define DRAW_LIST_DECLARE(ListName, DrawCallType) \
+#define DRAW_LIST_DECLARE(ListName, DrawCallType)         \
     struct ListName : public DrawListWapper<DrawCallType> \
-    { \
-        ListName(); \
-        ~ListName(); \
-        static ListName* Get(); \
+    {                                                     \
+        ListName();                                       \
+        ~ListName();                                      \
+        static ListName* Get();                           \
     };
 
-#define DRAW_LIST_IMPLEMENT(ListName, DrawCallType) \
-    ListName::ListName() { DrawListRegister::AddList(this); } \
+#define DRAW_LIST_IMPLEMENT(ListName, DrawCallType)               \
+    ListName::ListName() { DrawListRegister::AddList(this); }     \
     ListName::~ListName() { DrawListRegister::RemoveList(this); } \
-    ListName* ListName::Get() \
-    { \
-        static ListName instance; \
-        return &instance; \
+    ListName* ListName::Get()                                     \
+    {                                                             \
+        static ListName instance;                                 \
+        return &instance;                                         \
     }

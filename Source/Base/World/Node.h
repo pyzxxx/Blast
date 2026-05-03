@@ -1,7 +1,7 @@
 #pragma once
 
-#include "PCH.h"
 #include "Math/TransformUtils.h"
+#include "PCH.h"
 
 class Node
 {
@@ -43,6 +43,8 @@ public:
     glm::vec3 GetWorldFront();
 
     glm::vec3 GetWorldTranslation();
+
+    virtual void DirtyTransform() {}
 
 protected:
     void UpdateTransform();

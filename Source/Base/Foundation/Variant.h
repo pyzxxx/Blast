@@ -25,61 +25,28 @@ class Variant
 {
 public:
     Variant() : m_type(VariantType::Invalid) {}
-    
-    explicit Variant(bool value) : m_type(VariantType::Bool)
-    {
-        m_data.boolValue = value;
-    }
-    
-    explicit Variant(int8_t value) : m_type(VariantType::Int8) 
-    {
-        m_data.int8Value = value;
-    }
 
-    explicit Variant(int16_t value) : m_type(VariantType::Int16) 
-    {
-        m_data.int16Value = value;
-    }
+    explicit Variant(bool value) : m_type(VariantType::Bool) { m_data.boolValue = value; }
 
-    explicit Variant(int32_t value) : m_type(VariantType::Int32) 
-    {
-        m_data.int32Value = value;
-    }
+    explicit Variant(int8_t value) : m_type(VariantType::Int8) { m_data.int8Value = value; }
 
-    explicit Variant(int64_t value) : m_type(VariantType::Int64)
-    {
-        m_data.int64Value = value;
-    }
+    explicit Variant(int16_t value) : m_type(VariantType::Int16) { m_data.int16Value = value; }
 
-    explicit Variant(uint8_t value) : m_type(VariantType::U8)
-    {
-        m_data.u8Value = value;
-    }
+    explicit Variant(int32_t value) : m_type(VariantType::Int32) { m_data.int32Value = value; }
 
-    explicit Variant(uint16_t value) : m_type(VariantType::U16)
-    {
-        m_data.u16Value = value;
-    }
+    explicit Variant(int64_t value) : m_type(VariantType::Int64) { m_data.int64Value = value; }
 
-    explicit Variant(uint32_t value) : m_type(VariantType::U32)
-    {
-        m_data.u32Value = value;
-    }
+    explicit Variant(uint8_t value) : m_type(VariantType::U8) { m_data.u8Value = value; }
 
-    explicit Variant(uint64_t value) : m_type(VariantType::U64)
-    {
-        m_data.u64Value = value;
-    }
+    explicit Variant(uint16_t value) : m_type(VariantType::U16) { m_data.u16Value = value; }
 
-    explicit Variant(float value) : m_type(VariantType::Float)
-    {
-        m_data.floatValue = value;
-    }
+    explicit Variant(uint32_t value) : m_type(VariantType::U32) { m_data.u32Value = value; }
 
-    explicit Variant(double value) : m_type(VariantType::Double)
-    {
-        m_data.doubleValue = value;
-    }
+    explicit Variant(uint64_t value) : m_type(VariantType::U64) { m_data.u64Value = value; }
+
+    explicit Variant(float value) : m_type(VariantType::Float) { m_data.floatValue = value; }
+
+    explicit Variant(double value) : m_type(VariantType::Double) { m_data.doubleValue = value; }
 
     explicit Variant(const std::string& value) : m_type(VariantType::String)
     {
@@ -91,10 +58,7 @@ public:
         m_data.stringValue = new std::string(value ? value : "");
     }
 
-    explicit Variant(void* value) : m_type(VariantType::Pointer)
-    {
-        m_data.pointerValue = value;
-    }
+    explicit Variant(void* value) : m_type(VariantType::Pointer) { m_data.pointerValue = value; }
 
     explicit Variant(const std::vector<Variant>& value) : m_type(VariantType::Array)
     {
@@ -106,28 +70,20 @@ public:
         m_data.arrayValue = new std::vector<Variant>(list);
     }
 
-    Variant(const Variant& other)
-    {
-        CopyFrom(other);
-    }
+    Variant(const Variant& other) { CopyFrom(other); }
 
-    ~Variant()
-    {
-        Cleanup();
-    }
+    ~Variant() { Cleanup(); }
 
     Variant& operator=(const Variant& other)
     {
-        if (this != &other) {
+        if (this != &other)
+        {
             CopyFrom(other);
         }
         return *this;
     }
 
-    VariantType Type() const
-    {
-        return m_type;
-    }
+    VariantType Type() const { return m_type; }
 
     bool IsInvalid() const { return m_type == VariantType::Invalid; }
     bool IsBool() const { return m_type == VariantType::Bool; }
@@ -169,55 +125,25 @@ public:
         }
     }
 
-    int8_t GetInt8() const
-    {
-        return ConvertFromNumeric<int8_t>();
-    }
+    int8_t GetInt8() const { return ConvertFromNumeric<int8_t>(); }
 
-    int16_t GetInt16() const
-    {
-        return ConvertFromNumeric<int16_t>();
-    }
+    int16_t GetInt16() const { return ConvertFromNumeric<int16_t>(); }
 
-    int32_t GetInt32() const
-    {
-        return ConvertFromNumeric<int32_t>();
-    }
+    int32_t GetInt32() const { return ConvertFromNumeric<int32_t>(); }
 
-    int64_t GetInt64(int64_t default_value = 0) const
-    {
-        return ConvertFromNumeric<int64_t>();
-    }
+    int64_t GetInt64(int64_t default_value = 0) const { return ConvertFromNumeric<int64_t>(); }
 
-    uint8_t GetU8(uint8_t default_value = 0) const
-    {
-        return ConvertFromNumeric<uint8_t>();
-    }
+    uint8_t GetU8(uint8_t default_value = 0) const { return ConvertFromNumeric<uint8_t>(); }
 
-    uint16_t GetU16(uint16_t default_value = 0) const
-    {
-        return ConvertFromNumeric<uint16_t>();
-    }
+    uint16_t GetU16(uint16_t default_value = 0) const { return ConvertFromNumeric<uint16_t>(); }
 
-    uint32_t GetU32(uint32_t default_value = 0) const
-    {
-        return ConvertFromNumeric<uint32_t>();
-    }
+    uint32_t GetU32(uint32_t default_value = 0) const { return ConvertFromNumeric<uint32_t>(); }
 
-    uint64_t GetU64(uint64_t default_value = 0) const
-    {
-        return ConvertFromNumeric<uint64_t>();
-    }
+    uint64_t GetU64(uint64_t default_value = 0) const { return ConvertFromNumeric<uint64_t>(); }
 
-    float GetFloat(float default_value = 0.0f) const
-    {
-        return ConvertFromNumeric<float>();
-    }
+    float GetFloat(float default_value = 0.0f) const { return ConvertFromNumeric<float>(); }
 
-    double GetDouble(double default_value = 0.0) const
-    {
-        return ConvertFromNumeric<double>();
-    }
+    double GetDouble(double default_value = 0.0) const { return ConvertFromNumeric<double>(); }
 
     std::string GetString() const
     {
@@ -264,8 +190,9 @@ public:
 
         return *m_data.arrayValue;
     }
-    
-    void set_bool(bool value) {
+
+    void set_bool(bool value)
+    {
         Cleanup();
         m_type = VariantType::Bool;
         m_data.boolValue = value;
@@ -449,69 +376,40 @@ public:
 
         switch (m_type)
         {
-            case VariantType::Bool:
-                return m_data.boolValue == other.m_data.boolValue;
-            case VariantType::Int8:
-                return m_data.int8Value == other.m_data.int8Value;
-            case VariantType::Int16:
-                return m_data.int16Value == other.m_data.int16Value;
-            case VariantType::Int32:
-                return m_data.int32Value == other.m_data.int32Value;
-            case VariantType::Int64:
-                return m_data.int64Value == other.m_data.int64Value;
-            case VariantType::U8:
-                return m_data.u8Value == other.m_data.u8Value;
-            case VariantType::U16:
-                return m_data.u16Value == other.m_data.u16Value;
-            case VariantType::U32:
-                return m_data.u32Value == other.m_data.u32Value;
-            case VariantType::U64:
-                return m_data.u64Value == other.m_data.u64Value;
-            case VariantType::Float:
-                return m_data.floatValue == other.m_data.floatValue;
-            case VariantType::Double:
-                return m_data.doubleValue == other.m_data.doubleValue;
-            case VariantType::String:
-                return *m_data.stringValue == *other.m_data.stringValue;
-            case VariantType::Pointer:
-                return m_data.pointerValue == other.m_data.pointerValue;
-            case VariantType::Array:
-                return *m_data.arrayValue == *other.m_data.arrayValue;
-            case VariantType::Invalid:
-                return true;
+            case VariantType::Bool: return m_data.boolValue == other.m_data.boolValue;
+            case VariantType::Int8: return m_data.int8Value == other.m_data.int8Value;
+            case VariantType::Int16: return m_data.int16Value == other.m_data.int16Value;
+            case VariantType::Int32: return m_data.int32Value == other.m_data.int32Value;
+            case VariantType::Int64: return m_data.int64Value == other.m_data.int64Value;
+            case VariantType::U8: return m_data.u8Value == other.m_data.u8Value;
+            case VariantType::U16: return m_data.u16Value == other.m_data.u16Value;
+            case VariantType::U32: return m_data.u32Value == other.m_data.u32Value;
+            case VariantType::U64: return m_data.u64Value == other.m_data.u64Value;
+            case VariantType::Float: return m_data.floatValue == other.m_data.floatValue;
+            case VariantType::Double: return m_data.doubleValue == other.m_data.doubleValue;
+            case VariantType::String: return *m_data.stringValue == *other.m_data.stringValue;
+            case VariantType::Pointer: return m_data.pointerValue == other.m_data.pointerValue;
+            case VariantType::Array: return *m_data.arrayValue == *other.m_data.arrayValue;
+            case VariantType::Invalid: return true;
         }
         return false;
     }
 
-    bool operator!=(const Variant& other) const
-    {
-        return !(*this == other);
-    }
+    bool operator!=(const Variant& other) const { return !(*this == other); }
 
-    Variant& operator[](size_t index)
-    {
-        return ArrayAt(index);
-    }
+    Variant& operator[](size_t index) { return ArrayAt(index); }
 
-    const Variant& operator[](size_t index) const
-    {
-        return ArrayAt(index);
-    }
+    const Variant& operator[](size_t index) const { return ArrayAt(index); }
 
     bool Empty() const
     {
         switch (m_type)
         {
-            case VariantType::Invalid:
-                return true;
-            case VariantType::String:
-                return m_data.stringValue->empty();
-            case VariantType::Array:
-                return m_data.arrayValue->empty();
-            case VariantType::Pointer:
-                return m_data.pointerValue == nullptr;
-            default:
-                return false;
+            case VariantType::Invalid: return true;
+            case VariantType::String: return m_data.stringValue->empty();
+            case VariantType::Array: return m_data.arrayValue->empty();
+            case VariantType::Pointer: return m_data.pointerValue == nullptr;
+            default: return false;
         }
     }
 
@@ -551,8 +449,7 @@ private:
                 delete m_data.arrayValue;
                 m_data.arrayValue = nullptr;
                 break;
-            default:
-                break;
+            default: break;
         }
         m_type = VariantType::Invalid;
     }
@@ -564,50 +461,21 @@ private:
 
         switch (m_type)
         {
-            case VariantType::Bool:
-                m_data.boolValue = other.m_data.boolValue;
-                break;
-            case VariantType::Int8:
-                m_data.int8Value = other.m_data.int8Value;
-                break;
-            case VariantType::Int16:
-                m_data.int16Value = other.m_data.int16Value;
-                break;
-            case VariantType::Int32:
-                m_data.int32Value = other.m_data.int32Value;
-                break;
-            case VariantType::Int64:
-                m_data.int64Value = other.m_data.int64Value;
-                break;
-            case VariantType::U8:
-                m_data.u8Value = other.m_data.u8Value;
-                break;
-            case VariantType::U16:
-                m_data.u16Value = other.m_data.u16Value;
-                break;
-            case VariantType::U32:
-                m_data.u32Value = other.m_data.u32Value;
-                break;
-            case VariantType::U64:
-                m_data.u64Value = other.m_data.u64Value;
-                break;
-            case VariantType::Float:
-                m_data.floatValue = other.m_data.floatValue;
-                break;
-            case VariantType::Double:
-                m_data.doubleValue = other.m_data.doubleValue;
-                break;
-            case VariantType::String:
-                m_data.stringValue = new std::string(*other.m_data.stringValue);
-                break;
-            case VariantType::Pointer:
-                m_data.pointerValue = other.m_data.pointerValue;
-                break;
-            case VariantType::Array:
-                m_data.arrayValue = new std::vector<Variant>(*other.m_data.arrayValue);
-                break;
-            case VariantType::Invalid:
-                break;
+            case VariantType::Bool: m_data.boolValue = other.m_data.boolValue; break;
+            case VariantType::Int8: m_data.int8Value = other.m_data.int8Value; break;
+            case VariantType::Int16: m_data.int16Value = other.m_data.int16Value; break;
+            case VariantType::Int32: m_data.int32Value = other.m_data.int32Value; break;
+            case VariantType::Int64: m_data.int64Value = other.m_data.int64Value; break;
+            case VariantType::U8: m_data.u8Value = other.m_data.u8Value; break;
+            case VariantType::U16: m_data.u16Value = other.m_data.u16Value; break;
+            case VariantType::U32: m_data.u32Value = other.m_data.u32Value; break;
+            case VariantType::U64: m_data.u64Value = other.m_data.u64Value; break;
+            case VariantType::Float: m_data.floatValue = other.m_data.floatValue; break;
+            case VariantType::Double: m_data.doubleValue = other.m_data.doubleValue; break;
+            case VariantType::String: m_data.stringValue = new std::string(*other.m_data.stringValue); break;
+            case VariantType::Pointer: m_data.pointerValue = other.m_data.pointerValue; break;
+            case VariantType::Array: m_data.arrayValue = new std::vector<Variant>(*other.m_data.arrayValue); break;
+            case VariantType::Invalid: break;
         }
     }
 
@@ -616,35 +484,22 @@ private:
     {
         switch (m_type)
         {
-            case VariantType::Bool:
-                return static_cast<T>(m_data.boolValue ? 1 : 0);
-            case VariantType::Int8:
-                return static_cast<T>(m_data.int8Value);
-            case VariantType::Int16:
-                return static_cast<T>(m_data.int16Value);
-            case VariantType::Int32:
-                return static_cast<T>(m_data.int32Value);
-            case VariantType::Int64:
-                return static_cast<T>(m_data.int64Value);
-            case VariantType::U8:
-                return static_cast<T>(m_data.u8Value);
-            case VariantType::U16:
-                return static_cast<T>(m_data.u16Value);
-            case VariantType::U32:
-                return static_cast<T>(m_data.u32Value);
-            case VariantType::U64:
-                return static_cast<T>(m_data.u64Value);
-            case VariantType::Float:
-                return static_cast<T>(m_data.floatValue);
-            case VariantType::Double:
-                return static_cast<T>(m_data.doubleValue);
-            default:
-                return T(0);
+            case VariantType::Bool: return static_cast<T>(m_data.boolValue ? 1 : 0);
+            case VariantType::Int8: return static_cast<T>(m_data.int8Value);
+            case VariantType::Int16: return static_cast<T>(m_data.int16Value);
+            case VariantType::Int32: return static_cast<T>(m_data.int32Value);
+            case VariantType::Int64: return static_cast<T>(m_data.int64Value);
+            case VariantType::U8: return static_cast<T>(m_data.u8Value);
+            case VariantType::U16: return static_cast<T>(m_data.u16Value);
+            case VariantType::U32: return static_cast<T>(m_data.u32Value);
+            case VariantType::U64: return static_cast<T>(m_data.u64Value);
+            case VariantType::Float: return static_cast<T>(m_data.floatValue);
+            case VariantType::Double: return static_cast<T>(m_data.doubleValue);
+            default: return T(0);
         }
     }
 
-    union Data
-    {
+    union Data {
         bool boolValue;
         int8_t int8Value;
         int16_t int16Value;

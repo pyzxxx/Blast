@@ -1,18 +1,12 @@
 #include "CameraController.h"
+#include "Foundation/Log.h"
 #include "Input/Input.h"
 #include "World/Camera.h"
-#include "Foundation/Log.h"
 #include <imgui.h>
 
-void CameraController::Initialize()
-{
-    m_warnedNoCamera = false;
-}
+void CameraController::Initialize() { m_warnedNoCamera = false; }
 
-void CameraController::Terminate()
-{
-    m_camera = nullptr;
-}
+void CameraController::Terminate() { m_camera = nullptr; }
 
 void CameraController::SetTargetCamera(Camera* camera)
 {
@@ -76,7 +70,8 @@ void CameraController::Update(float dt)
 
     // Movement
     glm::vec3 currentPosition = m_camera->GetWorldTranslation();
-    glm::vec3 smoothedPosition = glm::lerp(currentPosition, m_targetPosition, glm::clamp(m_smoothSpeed * dt, 0.0f, 1.0f));
+    glm::vec3 smoothedPosition =
+        glm::lerp(currentPosition, m_targetPosition, glm::clamp(m_smoothSpeed * dt, 0.0f, 1.0f));
     m_camera->SetLocalTranslation(smoothedPosition);
 
     glm::vec3 currentEuler = m_camera->GetLocalEuler();
@@ -85,8 +80,14 @@ void CameraController::Update(float dt)
 
     // Rotation
     float deltaYaw = m_targetYaw - currentYaw;
-    while (deltaYaw > 180.0f) deltaYaw -= 360.0f;
-    while (deltaYaw < -180.0f) deltaYaw += 360.0f;
+    while (deltaYaw > 180.0f)
+    {
+        deltaYaw -= 360.0f;
+    }
+    while (deltaYaw < -180.0f)
+    {
+        deltaYaw += 360.0f;
+    }
 
     float smoothedYaw = currentYaw + deltaYaw * glm::clamp(m_rotationSmoothSpeed * dt, 0.0f, 1.0f);
     float smoothedPitch = glm::lerp(currentPitch, m_targetPitch, glm::clamp(m_rotationSmoothSpeed * dt, 0.0f, 1.0f));
@@ -136,7 +137,6 @@ void CameraController::ProcessKeyboardInput(float dt)
 
 void CameraController::ProcessMouseInput(float dt)
 {
-    (void)dt;
     Input* input = Input::Get();
 
     float deltaX, deltaY;
@@ -156,7 +156,6 @@ void CameraController::ProcessMouseInput(float dt)
 
 void CameraController::ProcessScrollInput(float dt)
 {
-    (void)dt;
     Input* input = Input::Get();
 
     float scrollX, scrollY;
