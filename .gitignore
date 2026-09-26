@@ -38,8 +38,8 @@ cmake-build-debug
 cmake-build-release
 
 # IDE
-.vscode/
-.idea/
+.vscode
+.idea
 
 # Asset
 *.pak
