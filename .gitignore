@@ -31,12 +31,21 @@
 *.out
 *.app
 
-*.spv
-*.log
-.idea
-
+# Cmake
+cmake-build-vs
+cmake-build-win
 cmake-build-debug
 cmake-build-release
 
-Bin
-Assets/Scene
+# IDE
+.vscode/
+.idea/
+
+# Asset
+*.pak
+
+# Temp
+*.spv
+*.log
+imgui.ini
+bin

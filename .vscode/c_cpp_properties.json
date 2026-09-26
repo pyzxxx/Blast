@@ -1,0 +1,36 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/Source/Base",
+                "${workspaceFolder}/Source/Runtime",
+                "${workspaceFolder}/Source/Tools",
+                "${workspaceFolder}/Extern/VulkanMemoryAllocator/include",
+                "${workspaceFolder}/Extern/imgui",
+                "${workspaceFolder}/Extern/tinygltf",
+                "${env:VULKAN_SDK}/Include"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE",
+                "NOMINMAX",
+                "WIN32_LEAN_AND_MEAN"
+            ],
+            "compilerPath": "C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.29.30133/bin/Hostx64/x64/cl.exe",
+            "cStandard": "c17",
+            "cppStandard": "c++23",
+            "intelliSenseMode": "windows-msvc-x64",
+            "configurationProvider": "ms-vscode.cmake-tools",
+            "browse": {
+                "path": [
+                    "${workspaceFolder}/Source",
+                    "${workspaceFolder}/Extern"
+                ],
+                "limitSymbolsToIncludedHeaders": true
+            }
+        }
+    ],
+    "version": 4
+}
