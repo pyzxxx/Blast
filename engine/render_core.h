@@ -29,28 +29,23 @@ public:
 
     uint32_t frame_alloc(uint32_t size);
     uint8_t* frame_cpu_addr() const {
-        BLAST_GPU_ASSERT_OWNER(owner_thread_);
         return frame_ring_.map;
     }
 
     uint64_t frame_gpu_addr() const {
-        BLAST_GPU_ASSERT_OWNER(owner_thread_);
         return frame_ring_.addr;
     }
 
     GpuBuffer frame_buffer() const {
-        BLAST_GPU_ASSERT_OWNER(owner_thread_);
         return frame_ring_.buffer;
     }
 
     uint32_t upload_alloc(uint32_t size);
     uint8_t* upload_cpu_addr() const {
-        BLAST_GPU_ASSERT_OWNER(owner_thread_);
         return upload_ring_.map;
     }
 
     GpuBuffer upload_buffer() const {
-        BLAST_GPU_ASSERT_OWNER(owner_thread_);
         return upload_ring_.buffer;
     }
 
@@ -62,52 +57,42 @@ public:
     uint32_t heap_add_view(GpuImageView view);
     void heap_remove_view(GpuImageView view);
     GpuDescriptorSet resource_set() const {
-        BLAST_GPU_ASSERT_OWNER(owner_thread_);
         return resource_set_;
     }
 
     GpuDescriptorSetLayout resource_layout() const {
-        BLAST_GPU_ASSERT_OWNER(owner_thread_);
         return resource_layout_;
     }
 
     GpuSwapchain swapchain() const {
-        BLAST_GPU_ASSERT_OWNER(owner_thread_);
         return swapchain_;
     }
 
     uint32_t swapchain_slot() const {
-        BLAST_GPU_ASSERT_OWNER(owner_thread_);
         return current_slot_;
     }
 
     uint32_t width() const {
-        BLAST_GPU_ASSERT_OWNER(owner_thread_);
         return width_;
     }
 
     uint32_t height() const {
-        BLAST_GPU_ASSERT_OWNER(owner_thread_);
         return height_;
     }
 
     uint32_t frames_in_flight() const {
-        BLAST_GPU_ASSERT_OWNER(owner_thread_);
         return frames_in_flight_;
     }
 
     uint32_t frame_index() const {
-        BLAST_GPU_ASSERT_OWNER(owner_thread_);
         return static_cast<uint32_t>(frame_n_ % frames_in_flight_);
     }
 
     uint64_t frame_value() const {
-        BLAST_GPU_ASSERT_OWNER(owner_thread_);
         return frame_n_ + 1;
     }
 
     uint64_t completed_frame() const {
-        BLAST_GPU_ASSERT_OWNER(owner_thread_);
         return gpu_->semaphore_value(frame_sem_);
     }
 
@@ -162,7 +147,6 @@ private:
     uint32_t alloc_resource_slot();
 
     GpuDriver* gpu_ = nullptr;
-    std::thread::id owner_thread_;
     GpuQueue queue_ = k_gpu_invalid;
     GpuSwapchain swapchain_ = k_gpu_invalid;
     GpuSemaphore frame_sem_ = k_gpu_invalid;

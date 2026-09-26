@@ -55,7 +55,6 @@ void RenderCore::Ring::reclaim(uint64_t point) {
 }
 
 bool RenderCore::init(const Services& services) {
-    owner_thread_ = std::this_thread::get_id();
     gpu_ = services.gpu;
     OS* os = services.os;
     os->window_size(width_, height_);
@@ -167,13 +166,11 @@ void RenderCore::shutdown() {
 }
 
 void RenderCore::resize(uint32_t width, uint32_t height) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     pending_width_ = width;
     pending_height_ = height;
 }
 
 bool RenderCore::begin_frame() {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     if (pending_width_ != width_ || pending_height_ != height_) {
         width_ = pending_width_;
         height_ = pending_height_;
@@ -222,7 +219,6 @@ bool RenderCore::begin_frame() {
 }
 
 void RenderCore::end_frame() {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     upload_flush();
     if (frame_cmds_.empty()) {
         new_frame_cmd();
@@ -239,14 +235,12 @@ void RenderCore::end_frame() {
 }
 
 GpuCmd RenderCore::new_frame_cmd() {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     GpuCmd cmd = gpu_->start_command_recording(frames_[frame_n_ % frames_in_flight_].pool);
     frame_cmds_.push_back(cmd);
     return cmd;
 }
 
 GpuCmd RenderCore::new_upload_cmd() {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     UploadSlot& s = upload_slots_[upload_active_];
     if (current_upload_cmd_ == k_gpu_invalid) {
         if (s.last_value != 0) {
@@ -261,7 +255,6 @@ GpuCmd RenderCore::new_upload_cmd() {
 }
 
 uint32_t RenderCore::frame_alloc(uint32_t size) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     uint32_t off = frame_ring_.alloc(size);
     if (off == UINT32_MAX) {
         LOGE("frame_alloc: out of frame budget (%u bytes)", size);
@@ -271,7 +264,6 @@ uint32_t RenderCore::frame_alloc(uint32_t size) {
 }
 
 uint32_t RenderCore::upload_alloc(uint32_t size) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     for (;;) {
         upload_reclaim();
         uint32_t off = upload_ring_.alloc(size);
@@ -298,27 +290,22 @@ uint32_t RenderCore::upload_alloc(uint32_t size) {
 }
 
 void RenderCore::delay_delete_image(GpuImage image) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     delay_deletes_.push_back({.image = image, .frame = frame_n_});
 }
 
 void RenderCore::delay_delete_buffer(GpuBuffer buffer) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     delay_deletes_.push_back({.buffer = buffer, .frame = frame_n_});
 }
 
 void RenderCore::delay_delete_pipeline(GpuPipeline pipeline) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     delay_deletes_.push_back({.pipeline = pipeline, .frame = frame_n_});
 }
 
 void RenderCore::delay_delete_view(GpuImageView view) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     delay_deletes_.push_back({.view = view, .frame = frame_n_});
 }
 
 uint32_t RenderCore::heap_add_view(GpuImageView view) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     uint32_t slot = alloc_resource_slot();
     if (slot == UINT32_MAX) {
         return k_invalid_slot;
@@ -330,7 +317,6 @@ uint32_t RenderCore::heap_add_view(GpuImageView view) {
 }
 
 void RenderCore::heap_remove_view(GpuImageView view) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     auto it = view_slots_.find(view);
     if (it == view_slots_.end()) {
         return;
@@ -342,7 +328,6 @@ void RenderCore::heap_remove_view(GpuImageView view) {
 }
 
 void RenderCore::upload_flush() {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     if (current_upload_cmd_ == k_gpu_invalid) {
         return;
     }

@@ -1,16 +1,8 @@
 #pragma once
 
-#include <cassert>
 #include <cstdint>
 #include <span>
-#include <thread>
 #include <vector>
-
-#ifndef NDEBUG
-#define BLAST_GPU_ASSERT_OWNER(owner) assert((owner) == std::this_thread::get_id())
-#else
-#define BLAST_GPU_ASSERT_OWNER(owner) ((void)0)
-#endif
 
 using GpuQueue = uint64_t;
 using GpuCmd = uint64_t;
@@ -474,7 +466,4 @@ public:
     GpuImageView swapchain_image_view(GpuSwapchain, uint32_t slot);
     bool swapchain_acquire(GpuSwapchain, uint32_t& slot_out);
     void swapchain_present(GpuQueue, GpuSwapchain, uint32_t slot, GpuSemaphore wait, uint64_t value);
-
-private:
-    std::thread::id owner_thread_;
 };

@@ -572,7 +572,6 @@ void destroy_swapchain_internal(VulkanSwapchain& sc) {
 } // namespace
 
 bool GpuDriver::init() {
-    owner_thread_ = std::this_thread::get_id();
     if (volkInitialize() != VK_SUCCESS) {
         LOGE("volkInitialize failed");
         return false;
@@ -795,22 +794,18 @@ void GpuDriver::shutdown() {
 }
 
 void GpuDriver::wait_idle() {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     vkDeviceWaitIdle(g_ctx.device);
 }
 
 GpuQueue GpuDriver::create_queue() {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     return g_queues.alloc(VulkanQueue{universal_queue()});
 }
 
 void GpuDriver::destroy_queue(GpuQueue handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     g_queues.free(handle);
 }
 
 GpuCmdPool GpuDriver::create_cmd_pool() {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VkCommandPoolCreateInfo ci = {};
     ci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     ci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -826,7 +821,6 @@ GpuCmdPool GpuDriver::create_cmd_pool() {
 }
 
 void GpuDriver::destroy_cmd_pool(GpuCmdPool handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VulkanCmdPool& p = g_cmd_pools.resolve(handle);
     vkDestroyCommandPool(g_ctx.device, p.handle, nullptr);
     for (uint32_t idx : p.cmds) {
@@ -837,7 +831,6 @@ void GpuDriver::destroy_cmd_pool(GpuCmdPool handle) {
 }
 
 void GpuDriver::reset_cmd_pool(GpuCmdPool handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VulkanCmdPool& p = g_cmd_pools.resolve(handle);
     vkResetCommandPool(g_ctx.device, p.handle, 0);
     for (uint32_t idx : p.cmds) {
@@ -848,7 +841,6 @@ void GpuDriver::reset_cmd_pool(GpuCmdPool handle) {
 }
 
 GpuCmd GpuDriver::start_command_recording(GpuCmdPool handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VulkanCmdPool& p = g_cmd_pools.resolve(handle);
 
     VkCommandBufferAllocateInfo ai = {};
@@ -878,7 +870,6 @@ GpuCmd GpuDriver::start_command_recording(GpuCmdPool handle) {
 }
 
 void GpuDriver::submit(GpuQueue queue, std::span<GpuCmd> cmds) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     std::vector<VkSubmitInfo2> infos(cmds.size());
     std::vector<VkCommandBufferSubmitInfo> cbi_storage(cmds.size());
     std::vector<std::vector<VkSemaphoreSubmitInfo>> wait_storage(cmds.size());
@@ -925,17 +916,14 @@ void GpuDriver::submit(GpuQueue queue, std::span<GpuCmd> cmds) {
 }
 
 void GpuDriver::cmd_wait_semaphore(GpuCmd handle, GpuSemaphore sem, uint64_t value) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     g_cmds.resolve(handle).waits.push_back({g_semaphores.resolve(sem).handle, value});
 }
 
 void GpuDriver::cmd_signal_semaphore(GpuCmd handle, GpuSemaphore sem, uint64_t value) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     g_cmds.resolve(handle).signals.push_back({g_semaphores.resolve(sem).handle, value});
 }
 
 GpuSemaphore GpuDriver::create_semaphore(uint64_t init_value) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VkSemaphoreTypeCreateInfo ti = {};
     ti.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
     ti.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
@@ -954,7 +942,6 @@ GpuSemaphore GpuDriver::create_semaphore(uint64_t init_value) {
 }
 
 void GpuDriver::wait_semaphore(GpuSemaphore handle, uint64_t value) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VkSemaphore sem = g_semaphores.resolve(handle).handle;
     VkSemaphoreWaitInfo wi = {};
     wi.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
@@ -965,20 +952,17 @@ void GpuDriver::wait_semaphore(GpuSemaphore handle, uint64_t value) {
 }
 
 uint64_t GpuDriver::semaphore_value(GpuSemaphore handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     uint64_t value = 0;
     vkGetSemaphoreCounterValue(g_ctx.device, g_semaphores.resolve(handle).handle, &value);
     return value;
 }
 
 void GpuDriver::destroy_semaphore(GpuSemaphore handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     vkDestroySemaphore(g_ctx.device, g_semaphores.resolve(handle).handle, nullptr);
     g_semaphores.free(handle);
 }
 
 GpuBuffer GpuDriver::create_buffer(const GpuBufferDesc& desc) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VkBufferCreateInfo bi = {};
     bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bi.size = desc.size;
@@ -1050,7 +1034,6 @@ GpuBuffer GpuDriver::create_buffer(const GpuBufferDesc& desc) {
 }
 
 void GpuDriver::destroy_buffer(GpuBuffer handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VulkanBuffer& buf = g_buffers.resolve(handle);
     if (buf.allocation != nullptr) {
         if (buf.mapped != nullptr) {
@@ -1066,17 +1049,14 @@ void GpuDriver::destroy_buffer(GpuBuffer handle) {
 }
 
 uint64_t GpuDriver::gpu_address(GpuBuffer handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     return g_buffers.resolve(handle).address;
 }
 
 void* GpuDriver::buffer_mapped(GpuBuffer handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     return g_buffers.resolve(handle).mapped;
 }
 
 void GpuDriver::buffer_unmap(GpuBuffer handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VulkanBuffer& buf = g_buffers.resolve(handle);
     if (buf.mapped == nullptr) {
         return;
@@ -1088,7 +1068,6 @@ void GpuDriver::buffer_unmap(GpuBuffer handle) {
 }
 
 GpuImage GpuDriver::create_image(const GpuImageDesc& desc) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VkFormat format = to_vk_format(desc.format);
     uint32_t array_layers = desc.type == GpuImageType::Cube ? 6 : desc.array_layers;
     bool bad_samples = desc.samples == 0 || (desc.samples & (desc.samples - 1)) != 0 || desc.samples > 64;
@@ -1164,14 +1143,12 @@ GpuImage GpuDriver::create_image(const GpuImageDesc& desc) {
 }
 
 void GpuDriver::image_size(GpuImage handle, uint32_t& width, uint32_t& height) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     const VulkanImage& img = g_images.resolve(handle);
     width = img.width;
     height = img.height;
 }
 
 void GpuDriver::destroy_image(GpuImage handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VulkanImage& img = g_images.resolve(handle);
     if (img.owned) {
         if (img.allocation != nullptr) {
@@ -1183,18 +1160,15 @@ void GpuDriver::destroy_image(GpuImage handle) {
 }
 
 GpuImageView GpuDriver::create_image_view(GpuImage image, const GpuImageViewDesc& desc) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     return alloc_image_view(g_images.resolve(image), desc);
 }
 
 void GpuDriver::destroy_image_view(GpuImageView handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     vkDestroyImageView(g_ctx.device, g_image_views.resolve(handle).handle, nullptr);
     g_image_views.free(handle);
 }
 
 void GpuDriver::cmd_barrier(GpuCmd handle, ResourceState from, ResourceState to) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     StateInfo src = state_info(from);
     StateInfo dst = state_info(to);
 
@@ -1213,7 +1187,6 @@ void GpuDriver::cmd_barrier(GpuCmd handle, ResourceState from, ResourceState to)
 }
 
 void GpuDriver::cmd_buffer_barrier(GpuCmd handle, GpuBuffer buffer, ResourceState from, ResourceState to) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     StateInfo src = state_info(from);
     StateInfo dst = state_info(to);
 
@@ -1237,7 +1210,6 @@ void GpuDriver::cmd_buffer_barrier(GpuCmd handle, GpuBuffer buffer, ResourceStat
 }
 
 void GpuDriver::cmd_image_barrier(GpuCmd handle, GpuImage image, ResourceState from, ResourceState to, uint32_t base_mip, uint32_t mip_count) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     StateInfo src = state_info(from);
     StateInfo dst = state_info(to);
     VulkanImage& img = g_images.resolve(image);
@@ -1420,7 +1392,6 @@ static VkStencilOpState to_vk_stencil_face(const GpuStencilFace& face, uint8_t r
 }
 
 GpuShader GpuDriver::create_shader(std::span<const uint32_t> spv) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VkShaderModuleCreateInfo ci = {};
     ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     ci.codeSize = spv.size() * sizeof(uint32_t);
@@ -1435,13 +1406,11 @@ GpuShader GpuDriver::create_shader(std::span<const uint32_t> spv) {
 }
 
 void GpuDriver::destroy_shader(GpuShader handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     vkDestroyShaderModule(g_ctx.device, g_shaders.resolve(handle).handle, nullptr);
     g_shaders.free(handle);
 }
 
 GpuRenderPass GpuDriver::create_render_pass(const GpuRenderPassDesc& desc) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     assert(desc.color_count <= k_max_color_attachments);
     assert(desc.color_count > 0 || desc.depth.view != k_gpu_invalid);
     VulkanRenderPass rp = {};
@@ -1479,12 +1448,10 @@ GpuRenderPass GpuDriver::create_render_pass(const GpuRenderPassDesc& desc) {
 }
 
 void GpuDriver::destroy_render_pass(GpuRenderPass handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     g_render_passes.free(handle);
 }
 
 GpuPipeline GpuDriver::create_pipeline(const GpuPipelineDesc& desc) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     bool is_compute = desc.cs != k_gpu_invalid;
     if (is_compute && (desc.vs != k_gpu_invalid || desc.fs != k_gpu_invalid)) {
         LOGE("create_pipeline: cs mixed with graphics stages");
@@ -1678,7 +1645,6 @@ GpuPipeline GpuDriver::create_pipeline(const GpuPipelineDesc& desc) {
 }
 
 void GpuDriver::destroy_pipeline(GpuPipeline handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VulkanPipeline& pipe = g_pipelines.resolve(handle);
     vkDestroyPipeline(g_ctx.device, pipe.handle, nullptr);
     vkDestroyPipelineLayout(g_ctx.device, pipe.layout, nullptr);
@@ -1686,7 +1652,6 @@ void GpuDriver::destroy_pipeline(GpuPipeline handle) {
 }
 
 void GpuDriver::cmd_bind_pipeline(GpuCmd handle, GpuPipeline pipeline) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VulkanPipeline& pipe = g_pipelines.resolve(pipeline);
     VulkanCommandBuffer& rec = g_cmds.resolve(handle);
     rec.bind_point = pipe.bind_point;
@@ -1694,7 +1659,6 @@ void GpuDriver::cmd_bind_pipeline(GpuCmd handle, GpuPipeline pipeline) {
 }
 
 void GpuDriver::cmd_bind_descriptors(GpuCmd handle, GpuPipeline pipeline, GpuDescriptorSet set) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VulkanCommandBuffer& rec = g_cmds.resolve(handle);
     VulkanPipeline& pipe = g_pipelines.resolve(pipeline);
     VkDescriptorSet vk_set = g_sets.resolve(set).handle;
@@ -1702,7 +1666,6 @@ void GpuDriver::cmd_bind_descriptors(GpuCmd handle, GpuPipeline pipeline, GpuDes
 }
 
 void GpuDriver::cmd_push_data(GpuCmd handle, GpuPipeline pipeline, const void* data, uint32_t size) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     assert(size <= k_max_push_data_size);
     assert(size % 4 == 0);
     VulkanPipeline& pipe = g_pipelines.resolve(pipeline);
@@ -1710,42 +1673,35 @@ void GpuDriver::cmd_push_data(GpuCmd handle, GpuPipeline pipeline, const void* d
 }
 
 void GpuDriver::cmd_bind_vertex_buffer(GpuCmd handle, uint32_t stream, GpuBuffer buffer, uint64_t offset) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VkBuffer vk_buffer = g_buffers.resolve(buffer).handle;
     VkDeviceSize vk_offset = offset;
     vkCmdBindVertexBuffers(g_cmds.resolve(handle).handle, stream, 1, &vk_buffer, &vk_offset);
 }
 
 void GpuDriver::cmd_bind_index_buffer(GpuCmd handle, GpuBuffer buffer, uint64_t offset) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     vkCmdBindIndexBuffer(g_cmds.resolve(handle).handle, g_buffers.resolve(buffer).handle, offset, VK_INDEX_TYPE_UINT32);
 }
 
 void GpuDriver::cmd_draw(GpuCmd handle, uint32_t vertex_count, uint32_t first_vertex) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     vkCmdDraw(g_cmds.resolve(handle).handle, vertex_count, 1, first_vertex, 0);
 }
 
 void GpuDriver::cmd_draw_indexed(GpuCmd handle, uint32_t index_count, uint32_t instance_count, uint32_t first_index,
                                  int32_t base_vertex, uint32_t first_instance) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     vkCmdDrawIndexed(g_cmds.resolve(handle).handle, index_count, instance_count, first_index, base_vertex,
                      first_instance);
 }
 
 void GpuDriver::cmd_set_scissor(GpuCmd handle, int32_t x, int32_t y, uint32_t width, uint32_t height) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VkRect2D scissor = {{x, y}, {width, height}};
     vkCmdSetScissor(g_cmds.resolve(handle).handle, 0, 1, &scissor);
 }
 
 void GpuDriver::cmd_dispatch(GpuCmd handle, uint32_t group_x, uint32_t group_y, uint32_t group_z) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     vkCmdDispatch(g_cmds.resolve(handle).handle, group_x, group_y, group_z);
 }
 
 void GpuDriver::cmd_begin_render_pass(GpuCmd handle, GpuRenderPass pass) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     const VulkanRenderPass& rp = g_render_passes.resolve(pass);
 
     VkRenderingAttachmentInfo color_atts[k_max_color_attachments] = {};
@@ -1786,12 +1742,10 @@ void GpuDriver::cmd_begin_render_pass(GpuCmd handle, GpuRenderPass pass) {
 }
 
 void GpuDriver::cmd_end_render_pass(GpuCmd handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     vkCmdEndRendering(g_cmds.resolve(handle).handle);
 }
 
 GpuDescriptorSetLayout GpuDriver::create_set_layout(std::span<const GpuLayoutBinding> bindings) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     assert(bindings.size() <= k_max_layout_bindings);
 
     VkDescriptorSetLayoutBinding vk_bindings[k_max_layout_bindings] = {};
@@ -1831,13 +1785,11 @@ GpuDescriptorSetLayout GpuDriver::create_set_layout(std::span<const GpuLayoutBin
 }
 
 void GpuDriver::destroy_set_layout(GpuDescriptorSetLayout handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     vkDestroyDescriptorSetLayout(g_ctx.device, g_set_layouts.resolve(handle).handle, nullptr);
     g_set_layouts.free(handle);
 }
 
 GpuDescriptorSet GpuDriver::create_descriptor_set(GpuDescriptorSetLayout layout) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VkDescriptorSetLayout vk_layout = g_set_layouts.resolve(layout).handle;
     VkDescriptorSetAllocateInfo ai = {};
     ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -1855,14 +1807,12 @@ GpuDescriptorSet GpuDriver::create_descriptor_set(GpuDescriptorSetLayout layout)
 }
 
 void GpuDriver::destroy_descriptor_set(GpuDescriptorSet handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VkDescriptorSet set = g_sets.resolve(handle).handle;
     vkFreeDescriptorSets(g_ctx.device, g_ctx.desc_pool, 1, &set);
     g_sets.free(handle);
 }
 
 GpuSampler GpuDriver::create_sampler(const GpuSamplerDesc& desc) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VkSamplerCreateInfo si = {};
     si.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     si.magFilter = to_vk_filter(desc.mag_filter);
@@ -1891,13 +1841,11 @@ GpuSampler GpuDriver::create_sampler(const GpuSamplerDesc& desc) {
 }
 
 void GpuDriver::destroy_sampler(GpuSampler handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     vkDestroySampler(g_ctx.device, g_samplers.resolve(handle).handle, nullptr);
     g_samplers.free(handle);
 }
 
 void GpuDriver::write_descriptor_image(GpuDescriptorSet set, uint32_t binding, uint32_t slot, GpuImageView view) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VulkanDescriptorSet& s = g_sets.resolve(set);
     GpuDescriptorType type = binding_type_of(s.layout, binding);
     assert(type == GpuDescriptorType::SampledImage || type == GpuDescriptorType::StorageImage);
@@ -1918,7 +1866,6 @@ void GpuDriver::write_descriptor_image(GpuDescriptorSet set, uint32_t binding, u
 }
 
 void GpuDriver::write_descriptor_buffer(GpuDescriptorSet set, uint32_t binding, uint32_t slot, GpuBuffer buffer) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VulkanDescriptorSet& s = g_sets.resolve(set);
     GpuDescriptorType type = binding_type_of(s.layout, binding);
     assert(type == GpuDescriptorType::StorageBuffer);
@@ -1940,7 +1887,6 @@ void GpuDriver::write_descriptor_buffer(GpuDescriptorSet set, uint32_t binding, 
 }
 
 void GpuDriver::write_descriptor_sampler(GpuDescriptorSet set, uint32_t binding, uint32_t slot, GpuSampler sampler) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VulkanDescriptorSet& s = g_sets.resolve(set);
     GpuDescriptorType type = binding_type_of(s.layout, binding);
     assert(type == GpuDescriptorType::Sampler);
@@ -1960,13 +1906,11 @@ void GpuDriver::write_descriptor_sampler(GpuDescriptorSet set, uint32_t binding,
 }
 
 void GpuDriver::cmd_copy_buffer(GpuCmd handle, GpuBuffer dst, uint64_t dst_offset, GpuBuffer src, uint64_t src_offset, uint64_t size) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VkBufferCopy region = {src_offset, dst_offset, size};
     vkCmdCopyBuffer(g_cmds.resolve(handle).handle, g_buffers.resolve(src).handle, g_buffers.resolve(dst).handle, 1, &region);
 }
 
 void GpuDriver::cmd_copy_to_image(GpuCmd handle, GpuImage dst, GpuBuffer src, uint64_t src_offset, uint32_t mip) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VulkanImage& img = g_images.resolve(dst);
     assert(mip < img.mip_levels);
     VkBufferImageCopy region = {};
@@ -1977,7 +1921,6 @@ void GpuDriver::cmd_copy_to_image(GpuCmd handle, GpuImage dst, GpuBuffer src, ui
 }
 
 GpuSwapchain GpuDriver::create_swapchain(void* native_window, uint32_t width, uint32_t height) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     GpuSwapchain handle = g_swapchains.alloc(VulkanSwapchain{});
     if (handle == k_gpu_invalid) {
         return k_gpu_invalid;
@@ -2028,7 +1971,6 @@ GpuSwapchain GpuDriver::create_swapchain(void* native_window, uint32_t width, ui
 }
 
 void GpuDriver::destroy_swapchain(GpuSwapchain handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VulkanSwapchain& sc = g_swapchains.resolve(handle);
     destroy_swapchain_internal(sc);
     if (sc.acquire_fence != VK_NULL_HANDLE) {
@@ -2040,7 +1982,6 @@ void GpuDriver::destroy_swapchain(GpuSwapchain handle) {
 }
 
 void GpuDriver::resize_swapchain(GpuSwapchain handle, uint32_t width, uint32_t height) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     if (width == 0 || height == 0) {
         return;
     }
@@ -2054,7 +1995,6 @@ void GpuDriver::resize_swapchain(GpuSwapchain handle, uint32_t width, uint32_t h
 }
 
 void GpuDriver::swapchain_extent(GpuSwapchain handle, uint32_t& width, uint32_t& height) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VulkanSwapchain& sc = g_swapchains.resolve(handle);
     VkSurfaceCapabilitiesKHR caps = {};
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g_ctx.physical, sc.surface, &caps);
@@ -2063,7 +2003,6 @@ void GpuDriver::swapchain_extent(GpuSwapchain handle, uint32_t& width, uint32_t&
 }
 
 GpuFormat GpuDriver::swapchain_format(GpuSwapchain handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     switch (g_swapchains.resolve(handle).format) {
         case VK_FORMAT_B8G8R8A8_UNORM:
             return GpuFormat::B8G8R8A8Unorm;
@@ -2075,22 +2014,18 @@ GpuFormat GpuDriver::swapchain_format(GpuSwapchain handle) {
 }
 
 uint32_t GpuDriver::swapchain_image_count(GpuSwapchain handle) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     return g_swapchains.resolve(handle).image_count;
 }
 
 GpuImage GpuDriver::swapchain_image(GpuSwapchain handle, uint32_t slot) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     return g_swapchains.resolve(handle).gpu_images[slot];
 }
 
 GpuImageView GpuDriver::swapchain_image_view(GpuSwapchain handle, uint32_t slot) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     return g_swapchains.resolve(handle).views[slot];
 }
 
 bool GpuDriver::swapchain_acquire(GpuSwapchain handle, uint32_t& slot_out) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VulkanSwapchain& sc = g_swapchains.resolve(handle);
 
     vkResetFences(g_ctx.device, 1, &sc.acquire_fence);
@@ -2111,7 +2046,6 @@ bool GpuDriver::swapchain_acquire(GpuSwapchain handle, uint32_t& slot_out) {
 }
 
 void GpuDriver::swapchain_present(GpuQueue queue, GpuSwapchain handle, uint32_t slot, GpuSemaphore wait, uint64_t value) {
-    BLAST_GPU_ASSERT_OWNER(owner_thread_);
     VulkanSwapchain& sc = g_swapchains.resolve(handle);
     VkQueue vk_queue = g_queues.resolve(queue).handle;
     VkSemaphore present_sem = sc.present_sems[slot];
