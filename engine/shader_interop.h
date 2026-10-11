@@ -1,4 +1,3 @@
-#pragma once
 #ifndef SHADER_INTEROP_H
 #define SHADER_INTEROP_H
 #ifdef __cplusplus
@@ -28,6 +27,19 @@ using uint = uint32_t;
 #define k_tex_count    8u
 
 #define k_material_stride 128u
+
+#define k_light_directional 0x1u
+#define k_light_spot        0x2u
+
+struct Light {
+    SH_VEC4(pos_range);
+    SH_VEC4(color_flags);
+    SH_VEC4(direction);
+    SH_VEC4(cones);
+};
+#ifdef __cplusplus
+static_assert(sizeof(Light) == 64);
+#endif
 
 struct MaterialParams {
     uint     layer;
@@ -69,10 +81,28 @@ struct DrawRecord {
 struct FrameConsts {
     SH_MAT4(view_proj);
     SH_MAT4(view);
+    SH_MAT4(inv_proj);
     SH_VEC4(camera_pos_time);
-    uint64_t params_buf_addr, transform_buf_addr, light_buf_addr;
+    uint64_t params_buf_addr, transform_buf_addr, light_buf_addr, cluster_buf_addr;
     uint     light_count;
-    uint     pad[3];
+    uint     dir_light_count;
+    uint     cluster_dim[3];
+    uint     tile_px;
+    float    cluster_scale;
+    float    cluster_bias;
+    SH_VEC4(ambient);
 };
+#ifdef __cplusplus
+static_assert(sizeof(FrameConsts) == 288);
+#endif
+
+#define k_cluster_max_lights 32u
+struct ClusterList {
+    uint count;
+    uint indices[k_cluster_max_lights];
+};
+#ifdef __cplusplus
+static_assert(sizeof(ClusterList) == 132);
+#endif
 
 #endif

@@ -1,7 +1,9 @@
 #include "viewer.h"
 #include "input_state.h"
 #include "log.h"
+#include "math_utils.h"
 #include "pak_manager.h"
+#include "renderer.h"
 #include "services.h"
 #include "ui_system.h"
 #include "world.h"
@@ -10,11 +12,13 @@
 
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 
 bool Viewer::init(const Services& services) {
     assets_ = services.assets;
     sets_ = services.loadsets;
     paks_ = services.paks;
+    renderer_ = services.renderer;
     ui_ = services.ui;
     world_ = services.world;
     input_ = services.input;
@@ -66,10 +70,18 @@ void Viewer::update(float dt) {
                 const glm::vec3& p = t->position();
                 ImGui::Text("position: %.2f  %.2f  %.2f", static_cast<double>(p.x), static_cast<double>(p.y), static_cast<double>(p.z));
             }
+            if (CameraComponent* cc = world_->get<CameraComponent>(camera)) {
+                float ev = cc->ev100();
+                if (ImGui::SliderFloat("EV100", &ev, -5.0f, 20.0f, "%.1f")) {
+                    cc->set_ev100(ev);
+                }
+            }
         } else {
             ImGui::TextUnformatted("no camera");
         }
     }
+
+    draw_light_panel();
 
     if (ImGui::CollapsingHeader("Scenes", ImGuiTreeNodeFlags_DefaultOpen)) {
         if (loading_ && loading_set_ != k_loadset_invalid) {
@@ -102,6 +114,141 @@ void Viewer::update(float dt) {
 }
 
 void Viewer::shutdown() {
+    clear_demo_lights();
+}
+
+void Viewer::draw_light_panel() {
+    if (!ImGui::CollapsingHeader("Lights", ImGuiTreeNodeFlags_DefaultOpen)) {
+        return;
+    }
+
+    if (renderer_ != nullptr) {
+        float lux = renderer_->ambient()[0];
+        if (ImGui::SliderFloat("ambient lux", &lux, 0.01f, 10000.0f, "%.2f lx", ImGuiSliderFlags_Logarithmic)) {
+            renderer_->set_ambient(lux, lux, lux);
+        }
+    }
+
+    static const char* k_type_names[] = {"point", "directional", "spot"};
+    int index = 0;
+    world_->each<LightComponent>([&](ObjectHandle, LightComponent& lc) {
+        ImGui::PushID(index);
+        uint32_t type = lc.light_type();
+        if (type > LightComponent::k_type_spot) {
+            type = LightComponent::k_type_point;
+        }
+
+        if (ImGui::TreeNode("##light", "Light %d (%s)", index, k_type_names[type])) {
+            int t = static_cast<int>(type);
+            if (ImGui::Combo("type", &t, k_type_names, 3)) {
+                lc.set_light_type(static_cast<uint32_t>(t));
+            }
+
+            float c[3] = {lc.color()[0], lc.color()[1], lc.color()[2]};
+            if (ImGui::ColorEdit3("color", c)) {
+                lc.set_color(c[0], c[1], c[2]);
+            }
+
+            if (lc.light_type() == LightComponent::k_type_directional) {
+                float lux = lc.intensity();
+                if (ImGui::SliderFloat("lux", &lux, 0.1f, 100000.0f, "%.1f lx", ImGuiSliderFlags_Logarithmic)) {
+                    lc.set_intensity_lux(lux);
+                }
+            } else {
+                float lumens = lc.intensity_lumens();
+                if (ImGui::SliderFloat("lumens", &lumens, 1.0f, 100000.0f, "%.1f lm", ImGuiSliderFlags_Logarithmic)) {
+                    lc.set_intensity_lumens(lumens);
+                }
+
+                float r = lc.range();
+                if (ImGui::DragFloat("range", &r, 0.1f, 0.1f, 1000.0f)) {
+                    lc.set_range(r);
+                }
+            }
+
+            if (lc.light_type() == LightComponent::k_type_spot) {
+                float inner = lc.spot_inner() * k_rad2deg;
+                float outer = lc.spot_outer() * k_rad2deg;
+                if (ImGui::SliderFloat("inner deg", &inner, 1.0f, 89.0f) ||
+                    ImGui::SliderFloat("outer deg", &outer, 1.0f, 89.0f)) {
+                    lc.set_spot_angles(inner * k_deg2rad, outer * k_deg2rad);
+                }
+            }
+
+            ImGui::TreePop();
+        }
+
+        ImGui::PopID();
+        ++index;
+    });
+
+    if (ImGui::Button("spotlight at camera")) {
+        add_flashlight();
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("add 16 point lights")) {
+        add_random_lights(16);
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("clear demo lights")) {
+        clear_demo_lights();
+    }
+}
+
+void Viewer::add_flashlight() {
+    if (light_set_ == k_loadset_invalid) {
+        light_set_ = sets_->create("demo-lights");
+    }
+
+    ObjectHandle camera = k_object_invalid;
+    world_->each<CameraComponent>([&](ObjectHandle h, CameraComponent&) {
+        if (camera == k_object_invalid) {
+            camera = h;
+        }
+    });
+
+    ObjectHandle handle = world_->create_object(light_set_);
+    Transform& t = world_->add<Transform>(handle);
+    const Transform* ct = camera != k_object_invalid ? world_->get<Transform>(camera) : nullptr;
+    if (ct != nullptr) {
+        t.set_position(ct->position());
+        t.set_rotation(ct->rotation());
+    }
+
+    LightComponent& light = world_->add<LightComponent>(handle);
+    light.set_light_type(LightComponent::k_type_spot);
+    light.set_intensity_lumens(800.0f);
+    light.set_range(40.0f);
+}
+
+void Viewer::add_random_lights(uint32_t count) {
+    if (light_set_ == k_loadset_invalid) {
+        light_set_ = sets_->create("demo-lights");
+    }
+
+    auto frand = [](float lo, float hi) {
+        return lo + (hi - lo) * (static_cast<float>(rand()) / static_cast<float>(RAND_MAX));
+    };
+
+    for (uint32_t i = 0; i < count; ++i) {
+        ObjectHandle handle = world_->create_object(light_set_);
+        Transform& t = world_->add<Transform>(handle);
+        t.set_position(glm::vec3(frand(-20.0f, 20.0f), frand(2.0f, 12.0f), frand(-10.0f, 10.0f)));
+        LightComponent& light = world_->add<LightComponent>(handle);
+        light.set_light_type(LightComponent::k_type_point);
+        light.set_color(frand(0.5f, 1.0f), frand(0.5f, 1.0f), frand(0.5f, 1.0f));
+        light.set_intensity_lumens(frand(50.0f, 500.0f));
+        light.set_range(frand(6.0f, 18.0f));
+    }
+}
+
+void Viewer::clear_demo_lights() {
+    if (light_set_ != k_loadset_invalid) {
+        sets_->release(light_set_);
+        light_set_ = k_loadset_invalid;
+    }
 }
 
 void Viewer::load_scene(int index) {
@@ -147,7 +294,7 @@ void Viewer::load_scene(int index) {
         t.set_rotation(glm::quat_cast(glm::inverse(view)));
         LightComponent& light = world_->add<LightComponent>(handle);
         light.set_light_type(LightComponent::k_type_directional);
-        light.set_color(3.0f, 3.0f, 3.0f);
+        light.set_intensity_lux(1000.0f);
     }
 
     uint32_t done = 0;

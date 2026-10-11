@@ -12,6 +12,7 @@
 class AssetManager;
 class LoadSets;
 class PakManager;
+class Renderer;
 class UiSystem;
 class World;
 struct InputState;
@@ -30,10 +31,15 @@ private:
 
     void load_scene(int index);
     void scene_load_done(LoadSet set, int index);
+    void draw_light_panel();
+    void add_flashlight();
+    void add_random_lights(uint32_t count);
+    void clear_demo_lights();
 
     AssetManager* assets_ = nullptr;
     LoadSets* sets_ = nullptr;
     PakManager* paks_ = nullptr;
+    Renderer* renderer_ = nullptr;
     UiSystem* ui_ = nullptr;
     World* world_ = nullptr;
     const InputState* input_ = nullptr;
@@ -41,6 +47,7 @@ private:
     CameraController camera_controller_;
     LoadSet scene_set_ = k_loadset_invalid;
     LoadSet loading_set_ = k_loadset_invalid;
+    LoadSet light_set_ = k_loadset_invalid;
     bool loading_ = false;
     int selected_ = -1;
     std::chrono::steady_clock::time_point scene_t0_{};

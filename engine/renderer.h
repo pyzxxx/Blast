@@ -23,6 +23,7 @@ struct Pipelines {
     GpuPipeline mesh_depth_cutout = k_gpu_invalid;
     GpuPipeline mesh_main = k_gpu_invalid;
     GpuPipeline mesh_forward = k_gpu_invalid;
+    GpuPipeline cluster = k_gpu_invalid;
     GpuPipeline composite = k_gpu_invalid;
     GpuPipeline ui = k_gpu_invalid;
 };
@@ -58,6 +59,13 @@ public:
 
     void render();
 
+    const float* ambient() const { return ambient_; }
+    void set_ambient(float r, float g, float b) {
+        ambient_[0] = r;
+        ambient_[1] = g;
+        ambient_[2] = b;
+    }
+
 private:
     static constexpr uint32_t k_max_draws = 16384;
     static constexpr uint32_t k_max_swapchain_slots = 8;
@@ -76,6 +84,7 @@ private:
     void sort_lists();
     void compact_list(DrawList& list);
     void execute_draws(GpuCmd cmd, const DrawList& list, uint64_t pass_addr);
+    void pass_cluster(GpuCmd cmd);
     void pass_depth(GpuCmd cmd);
     void pass_main(GpuCmd cmd);
     void pass_composite(GpuCmd cmd);
@@ -124,4 +133,10 @@ private:
     uint64_t light_buf_addr_ = 0;
     uint8_t* composite_cpu_ = nullptr;
     uint64_t composite_addr_ = 0;
+    GpuBuffer cluster_buf_ = k_gpu_invalid;
+    uint64_t cluster_buf_addr_ = 0;
+    uint32_t cluster_dim_[3] = {0, 0, 0};
+
+    float ambient_[3] = {1.0f, 1.0f, 1.0f};
+    float exposure_ = 1.0f;
 };

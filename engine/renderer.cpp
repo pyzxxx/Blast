@@ -6,6 +6,7 @@
 #include "mem.h"
 #include "mesh_library.h"
 #include "pak_format.h"
+#include "photometry.h"
 #include "services.h"
 #include "ui_system.h"
 #include "vfs.h"
@@ -22,6 +23,9 @@
 #include <vector>
 
 namespace {
+
+constexpr uint32_t k_cluster_tile_px = 32;
+constexpr uint32_t k_cluster_slices = 24;
 
 struct CompositeConsts {
     uint32_t src_slot;
@@ -256,7 +260,7 @@ void Renderer::shutdown() {
     }
 
     GpuPipeline* all_pipes[] = {&pipes_.mesh_depth, &pipes_.mesh_depth_cutout, &pipes_.mesh_main,
-                                &pipes_.mesh_forward, &pipes_.composite, &pipes_.ui};
+                                &pipes_.mesh_forward, &pipes_.cluster, &pipes_.composite, &pipes_.ui};
     for (GpuPipeline* p : all_pipes) {
         if (*p != k_gpu_invalid) {
             gpu_->destroy_pipeline(*p);
@@ -311,6 +315,13 @@ void Renderer::shutdown() {
         }
 
         *v = k_gpu_invalid;
+    }
+
+    if (cluster_buf_ != k_gpu_invalid) {
+        gpu_->destroy_buffer(cluster_buf_);
+        cluster_buf_ = k_gpu_invalid;
+        cluster_buf_addr_ = 0;
+        cluster_dim_[0] = cluster_dim_[1] = cluster_dim_[2] = 0;
     }
 }
 
@@ -433,7 +444,7 @@ void Renderer::declare_pipeline(GpuPipeline& slot, const GpuPipelineDesc& desc) 
         slot = k_gpu_invalid;
     }
 
-    if (desc.vs == k_gpu_invalid || desc.pass == k_gpu_invalid) {
+    if (desc.cs == k_gpu_invalid && (desc.vs == k_gpu_invalid || desc.pass == k_gpu_invalid)) {
         LOGE("Renderer: pipeline declaration incomplete");
         return;
     }
@@ -548,6 +559,39 @@ void Renderer::declare_frame(GpuCmd cmd) {
     declare_pipeline(pipes_.mesh_main, mesh_main_pipe(main_pass_, ShaderId::ModelVert, ShaderId::ModelFrag, false));
     declare_pipeline(pipes_.mesh_forward, mesh_main_pipe(main_pass_, ShaderId::ModelVert, ShaderId::ModelFrag, true));
 
+    GpuPipelineDesc cluster_pipe_desc = {};
+    cluster_pipe_desc.cs = get_shader(ShaderId::ClusterComp);
+    cluster_pipe_desc.set_layouts[0] = resource_layout_;
+    cluster_pipe_desc.set_layout_count = 1;
+    declare_pipeline(pipes_.cluster, cluster_pipe_desc);
+
+    const uint32_t grid_w = (rcore_->width() + k_cluster_tile_px - 1) / k_cluster_tile_px;
+    const uint32_t grid_h = (rcore_->height() + k_cluster_tile_px - 1) / k_cluster_tile_px;
+    if (grid_w != cluster_dim_[0] || grid_h != cluster_dim_[1] || k_cluster_slices != cluster_dim_[2]) {
+        if (cluster_buf_ != k_gpu_invalid) {
+            rcore_->delay_delete_buffer(cluster_buf_);
+            cluster_buf_ = k_gpu_invalid;
+            cluster_buf_addr_ = 0;
+        }
+
+        if (grid_w > 0 && grid_h > 0) {
+            GpuBufferDesc bd = {};
+            bd.size = static_cast<uint64_t>(grid_w) * grid_h * k_cluster_slices * sizeof(ClusterList);
+            bd.usage = GpuBufferUsage::Storage | GpuBufferUsage::DeviceAddress;
+            bd.memory = GpuMemoryDomain::GpuOnly;
+            cluster_buf_ = gpu_->create_buffer(bd);
+            if (cluster_buf_ != k_gpu_invalid) {
+                cluster_buf_addr_ = gpu_->gpu_address(cluster_buf_);
+            } else {
+                LOGE("Renderer: cluster buffer creation failed");
+            }
+        }
+
+        cluster_dim_[0] = grid_w;
+        cluster_dim_[1] = grid_h;
+        cluster_dim_[2] = k_cluster_slices;
+    }
+
     uint32_t slot_count = gpu_->swapchain_image_count(rcore_->swapchain());
     assert(slot_count <= k_max_swapchain_slots);
 
@@ -595,6 +639,7 @@ void Renderer::render() {
     collect();
     sort_lists();
 
+    pass_cluster(cmd);
     pass_depth(cmd);
     pass_main(cmd);
     pass_composite(cmd);
@@ -624,45 +669,65 @@ void Renderer::collect() {
     transforms_ = reinterpret_cast<glm::mat4*>(tr_cpu);
     transform_count_ = 0;
 
-    constexpr uint32_t k_max_lights = 8;
-    constexpr uint32_t k_light_stride = 32;
-    constexpr uint32_t k_light_flag_directional = 1u;
+    constexpr uint32_t k_max_lights = 256;
 
     alloc(static_cast<uint32_t>(sizeof(FrameConsts)), frame_consts_cpu_, frame_addr_);
-    alloc(k_max_lights * k_light_stride, light_buf_cpu_, light_buf_addr_);
-    memset(light_buf_cpu_, 0, k_max_lights * k_light_stride);
+    alloc(k_max_lights * static_cast<uint32_t>(sizeof(Light)), light_buf_cpu_, light_buf_addr_);
+    memset(light_buf_cpu_, 0, k_max_lights * sizeof(Light));
     alloc(static_cast<uint32_t>(sizeof(CompositeConsts)), composite_cpu_, composite_addr_);
 
+    Light* lights = reinterpret_cast<Light*>(light_buf_cpu_);
     uint32_t light_total = 0;
     uint32_t light_count = 0;
-    world_->each<LightComponent>([&](ObjectHandle e, LightComponent& lc) {
-        ++light_total;
+
+    auto write_light = [&](LightComponent& lc, const glm::mat4& world_mat) {
         if (light_count >= k_max_lights) {
             return;
         }
 
-        Transform* t = world_->get<Transform>(e);
-        glm::mat4 world_mat = t ? t->world_matrix() : glm::mat4(1.0f);
-        const float* color = lc.color();
-        uint8_t* slot = light_buf_cpu_ + light_count * k_light_stride;
-
-        if (lc.light_type() == LightComponent::k_type_directional) {
-            glm::vec3 dir = -glm::normalize(glm::vec3(world_mat[2]));
-            uint32_t flags = k_light_flag_directional;
-            memcpy(slot + 0, &dir, sizeof(glm::vec3));
-            memcpy(slot + 16, color, sizeof(float) * 3);
-            memcpy(slot + 28, &flags, sizeof(uint32_t));
+        Light& L = lights[light_count++];
+        glm::vec3 fwd = -glm::normalize(glm::vec3(world_mat[2]));
+        uint32_t type = lc.light_type();
+        uint32_t flags = 0u;
+        if (type == LightComponent::k_type_directional) {
+            memcpy(L.pos_range, &fwd, sizeof(glm::vec3));
+            flags = k_light_directional;
         } else {
             glm::vec3 pos = glm::vec3(world_mat[3]);
-            float range = lc.range();
-            uint32_t flags = 0u;
-            memcpy(slot + 0, &pos, sizeof(glm::vec3));
-            memcpy(slot + 12, &range, sizeof(float));
-            memcpy(slot + 16, color, sizeof(float) * 3);
-            memcpy(slot + 28, &flags, sizeof(uint32_t));
+            memcpy(L.pos_range, &pos, sizeof(glm::vec3));
+            L.pos_range[3] = lc.range();
+            if (type == LightComponent::k_type_spot) {
+                flags = k_light_spot;
+            }
         }
 
-        ++light_count;
+        memcpy(L.color_flags, lc.color(), sizeof(float) * 3);
+        L.color_flags[0] *= lc.intensity();
+        L.color_flags[1] *= lc.intensity();
+        L.color_flags[2] *= lc.intensity();
+        memcpy(&L.color_flags[3], &flags, sizeof(uint32_t));
+        memcpy(L.direction, &fwd, sizeof(glm::vec3));
+        L.cones[0] = glm::cos(lc.spot_inner());
+        L.cones[1] = glm::cos(lc.spot_outer());
+    };
+
+    world_->each<LightComponent>([&](ObjectHandle e, LightComponent& lc) {
+        ++light_total;
+        if (lc.light_type() != LightComponent::k_type_directional) {
+            return;
+        }
+
+        Transform* t = world_->get<Transform>(e);
+        write_light(lc, t ? t->world_matrix() : glm::mat4(1.0f));
+    });
+    const uint32_t dir_light_count = light_count;
+    world_->each<LightComponent>([&](ObjectHandle e, LightComponent& lc) {
+        if (lc.light_type() == LightComponent::k_type_directional) {
+            return;
+        }
+
+        Transform* t = world_->get<Transform>(e);
+        write_light(lc, t ? t->world_matrix() : glm::mat4(1.0f));
     });
     if (light_total > k_max_lights) {
         LOGW("Renderer: %u lights in world, only first %u used", light_total, k_max_lights);
@@ -681,6 +746,7 @@ void Renderer::collect() {
     float fov_y = cam ? cam->fov_y() : 1.0471976f;
     float near_z = cam ? cam->near_z() : 0.1f;
     float far_z = cam ? cam->far_z() : 1000.0f;
+    exposure_ = ev100_to_exposure(cam ? cam->ev100() : 9.4f);
     float aspect = rcore_->height() > 0 ? static_cast<float>(rcore_->width()) / static_cast<float>(rcore_->height()) : 1.0f;
 
     glm::mat4 view = glm::inverse(cam_world);
@@ -691,15 +757,30 @@ void Renderer::collect() {
     FrameConsts fc = {};
     memcpy(fc.view_proj, &view_proj, sizeof(fc.view_proj));
     memcpy(fc.view, &view, sizeof(fc.view));
+    glm::mat4 inv_proj = glm::inverse(proj);
+    memcpy(fc.inv_proj, &inv_proj, sizeof(fc.inv_proj));
     glm::vec3 cam_pos = glm::vec3(cam_world[3]);
     fc.camera_pos_time[0] = cam_pos.x;
     fc.camera_pos_time[1] = cam_pos.y;
     fc.camera_pos_time[2] = cam_pos.z;
     fc.camera_pos_time[3] = 0.0f;
     fc.light_count = light_count;
+    fc.dir_light_count = dir_light_count;
     fc.params_buf_addr = materials_->params_addr();
     fc.transform_buf_addr = transforms_addr_;
     fc.light_buf_addr = light_buf_addr_;
+    fc.cluster_buf_addr = cluster_buf_addr_;
+    fc.cluster_dim[0] = cluster_dim_[0];
+    fc.cluster_dim[1] = cluster_dim_[1];
+    fc.cluster_dim[2] = cluster_dim_[2];
+    fc.tile_px = k_cluster_tile_px;
+    if (near_z > 0.0f && far_z > near_z) {
+        const float slice_log = glm::log(far_z / near_z);
+        fc.cluster_scale = static_cast<float>(cluster_dim_[2]) / slice_log;
+        fc.cluster_bias = -static_cast<float>(cluster_dim_[2]) * glm::log(near_z) / slice_log;
+    }
+    memcpy(fc.ambient, ambient_, sizeof(ambient_));
+
     memcpy(frame_consts_cpu_, &fc, sizeof(fc));
 
     glm::vec4 planes[6];
@@ -855,6 +936,20 @@ void Renderer::execute_draws(GpuCmd cmd, const DrawList& list, uint64_t pass_add
     }
 }
 
+void Renderer::pass_cluster(GpuCmd cmd) {
+    const uint32_t total = cluster_dim_[0] * cluster_dim_[1] * cluster_dim_[2];
+    if (pipes_.cluster == k_gpu_invalid || cluster_buf_ == k_gpu_invalid || total == 0) {
+        return;
+    }
+
+    gpu_->cmd_bind_pipeline(cmd, pipes_.cluster);
+    gpu_->cmd_bind_descriptors(cmd, pipes_.cluster, resource_set_);
+    PushData pd = {.frame_addr = frame_addr_, .pass_addr = 0, .draw_addr = 0, .draw_idx = 0};
+    gpu_->cmd_push_data(cmd, pipes_.cluster, &pd, sizeof(pd));
+    gpu_->cmd_dispatch(cmd, (total + 63) / 64, 1, 1);
+    gpu_->cmd_buffer_barrier(cmd, cluster_buf_, ResourceState::StorageWrite, ResourceState::ShaderRead);
+}
+
 void Renderer::pass_depth(GpuCmd cmd) {
     if (depth_pass_ == k_gpu_invalid) {
         return;
@@ -888,7 +983,7 @@ void Renderer::pass_composite(GpuCmd cmd) {
     if (slot < composite_pass_count_ && pipes_.composite != k_gpu_invalid) {
         CompositeConsts cc = {};
         cc.src_slot = scene_color_slot_;
-        cc.exposure = 1.0f;
+        cc.exposure = exposure_;
         memcpy(composite_cpu_, &cc, sizeof(cc));
         gpu_->cmd_begin_render_pass(cmd, composite_passes_[slot]);
         gpu_->cmd_bind_pipeline(cmd, pipes_.composite);

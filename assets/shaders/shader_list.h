@@ -2,6 +2,8 @@ REGISTER_SHADER(ModelVert, "shaders/model.vert")
 
 REGISTER_SHADER(ModelFrag, "shaders/model.frag")
 
+REGISTER_SHADER(ClusterComp, "shaders/cluster.comp")
+
 REGISTER_SHADER(DepthVert, "shaders/depth.vert")
 
 REGISTER_SHADER(DepthFrag, "shaders/depth.frag")

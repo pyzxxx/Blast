@@ -1,4 +1,5 @@
 #include "world.h"
+#include "math_utils.h"
 #include "pak_format.h"
 #include "services.h"
 
@@ -330,13 +331,32 @@ ObjectHandle World::spawn_prefab(uint64_t id, LoadSet set, AssetPriority priorit
             uint32_t light_type = 0;
             float color[3] = {};
             float range = 0.0f;
+            uint16_t angles[2] = {};
             memcpy(&light_type, comp.payload + 0, sizeof(uint32_t));
             memcpy(color, comp.payload + 4, sizeof(color));
+            memcpy(angles, comp.payload + 16, sizeof(angles));
             memcpy(&range, comp.payload + 20, sizeof(float));
             LightComponent& lc = add<LightComponent>(e);
             lc.set_light_type(light_type);
-            lc.set_color(color[0], color[1], color[2]);
             lc.set_range(range);
+            if (light_type == LightComponent::k_type_spot) {
+                constexpr float k_scale = k_pi / 65535.0f;
+                float inner = static_cast<float>(angles[0]) * k_scale;
+                float outer = static_cast<float>(angles[1]) * k_scale;
+                if (angles[0] != 0 && outer > inner) {
+                    lc.set_spot_angles(inner, outer);
+                }
+            }
+            float m = color[0] > color[1] ? color[0] : color[1];
+            m = m > color[2] ? m : color[2];
+            if (m > 1e-6f) {
+                lc.set_color(color[0] / m, color[1] / m, color[2] / m);
+                if (light_type == LightComponent::k_type_directional) {
+                    lc.set_intensity_lux(m * 1000.0f);
+                } else {
+                    lc.set_intensity_lumens(m * 800.0f);
+                }
+            }
         } else {
             LOGW("World: prefab %llu component %u unknown type %u, skipped",
                  static_cast<uint64_t>(id), i, comp.type);

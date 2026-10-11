@@ -1,0 +1,60 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+#include "common.glsl"
+
+layout(local_size_x = 64) in;
+
+layout(buffer_reference, std430) readonly buffer LightBuf { Light lights[]; };
+layout(buffer_reference, std430) buffer ClusterBufW { ClusterList lists[]; };
+
+void main() {
+    FrameConsts fc = frame_consts();
+    uvec3 dim = uvec3(fc.cluster_dim[0], fc.cluster_dim[1], fc.cluster_dim[2]);
+    uint cid = gl_GlobalInvocationID.x;
+    if (cid >= dim.x * dim.y * dim.z) {
+        return;
+    }
+
+    uint tx = cid % dim.x;
+    uint ty = (cid / dim.x) % dim.y;
+    uint sz = cid / (dim.x * dim.y);
+
+    vec2 scr = vec2(dim.xy) * float(fc.tile_px);
+    vec2 ndc_lo = vec2(tx, ty) * float(fc.tile_px) / scr * 2.0 - 1.0;
+    vec2 ndc_hi = vec2(tx + 1u, ty + 1u) * float(fc.tile_px) / scr * 2.0 - 1.0;
+
+    vec3 bmin = vec3(1e30);
+    vec3 bmax = vec3(-1e30);
+    float z0 = exp((float(sz) - fc.cluster_bias) / fc.cluster_scale);
+    float z1 = exp((float(sz) + 1.0 - fc.cluster_bias) / fc.cluster_scale);
+    for (uint cy = 0u; cy < 2u; ++cy) {
+        for (uint cx = 0u; cx < 2u; ++cx) {
+            vec2 ndc = vec2(cx == 0u ? ndc_lo.x : ndc_hi.x, cy == 0u ? ndc_lo.y : ndc_hi.y);
+            vec4 p = fc.inv_proj * vec4(ndc, 0.0, 1.0);
+            vec3 pt = p.xyz / p.w;
+            vec3 ray = vec3(pt.xy / -pt.z, -1.0);
+            vec3 c0 = ray * z0;
+            vec3 c1 = ray * z1;
+            bmin = min(bmin, min(c0, c1));
+            bmax = max(bmax, max(c0, c1));
+        }
+    }
+
+    LightBuf lb = LightBuf(fc.light_buf_addr);
+    ClusterBufW cb = ClusterBufW(fc.cluster_buf_addr);
+    uint n = 0u;
+    for (uint i = fc.dir_light_count; i < fc.light_count && n < k_cluster_max_lights; ++i) {
+        Light L = lb.lights[i];
+        vec3 vp = (fc.view * vec4(L.pos_range.xyz, 1.0)).xyz;
+        float r = max(L.pos_range.w, 1e-3);
+        vec3 q = clamp(vp, bmin, bmax);
+        vec3 d = q - vp;
+        if (dot(d, d) <= r * r) {
+            cb.lists[cid].indices[n] = i;
+            ++n;
+        }
+    }
+
+    cb.lists[cid].count = n;
+}

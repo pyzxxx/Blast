@@ -4,7 +4,9 @@
 #include "handle_pool.h"
 #include "loadset.h"
 #include "log.h"
+#include "math_utils.h"
 #include "mem.h"
+#include "photometry.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -120,25 +122,38 @@ public:
     float fov_y() const { return fov_y_; }
     float near_z() const { return near_z_; }
     float far_z() const { return far_z_; }
+    float ev100() const { return ev100_; }
 
     void set_fov_y(float fov_y) { fov_y_ = fov_y; }
     void set_near_z(float near_z) { near_z_ = near_z; }
     void set_far_z(float far_z) { far_z_ = far_z; }
+    void set_ev100(float ev100) { ev100_ = ev100; }
 
 private:
     float fov_y_ = 1.0471976f;
     float near_z_ = 0.1f;
     float far_z_ = 1000.0f;
+    float ev100_ = 9.4f;
 };
 
 class LightComponent : public Component {
 public:
     static constexpr uint32_t k_type_point = 0;
     static constexpr uint32_t k_type_directional = 1;
+    static constexpr uint32_t k_type_spot = 2;
 
     uint32_t light_type() const { return light_type_; }
     const float* color() const { return color_; }
     float range() const { return range_; }
+    float spot_inner() const { return spot_inner_; }
+    float spot_outer() const { return spot_outer_; }
+
+    float intensity() const { return intensity_; }
+
+    float intensity_lumens() const {
+        return light_type_ == k_type_spot ? cd_spot_to_lm(intensity_, spot_outer_)
+                                          : intensity_ * 4.0f * k_pi;
+    }
 
     void set_light_type(uint32_t light_type) { light_type_ = light_type; }
     void set_color(float r, float g, float b) {
@@ -149,10 +164,26 @@ public:
 
     void set_range(float range) { range_ = range; }
 
+    void set_intensity_lux(float lux) { intensity_ = lux; }
+    void set_intensity_candela(float candela) { intensity_ = candela; }
+
+    void set_intensity_lumens(float lumens) {
+        intensity_ = light_type_ == k_type_spot ? lm_to_cd_spot(lumens, spot_outer_)
+                                                : lm_to_cd_point(lumens);
+    }
+
+    void set_spot_angles(float inner, float outer) {
+        spot_inner_ = inner;
+        spot_outer_ = outer > inner ? outer : inner;
+    }
+
 private:
     uint32_t light_type_ = k_type_point;
     float color_[3] = {1.0f, 1.0f, 1.0f};
+    float intensity_ = lm_to_cd_point(100.0f);
     float range_ = 10.0f;
+    float spot_inner_ = 25.0f * k_deg2rad;
+    float spot_outer_ = 35.0f * k_deg2rad;
 };
 
 class ComponentPoolBase {
