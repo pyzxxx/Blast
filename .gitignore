@@ -47,5 +47,6 @@ cmake-build-release
 # Temp
 *.spv
 *.log
+*.ninja_log
 imgui.ini
 bin
