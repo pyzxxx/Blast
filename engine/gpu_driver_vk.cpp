@@ -146,6 +146,7 @@ struct Context {
     VkDescriptorPool desc_pool = VK_NULL_HANDLE;
     uint32_t queue_family = 0;
     VkPhysicalDeviceMemoryProperties mem_props = {};
+    bool anisotropy_supported = false;
 };
 
 Context g_ctx;
@@ -240,6 +241,8 @@ VkFormat to_vk_format(GpuFormat format) {
             return VK_FORMAT_B8G8R8A8_UNORM;
         case GpuFormat::D32Float:
             return VK_FORMAT_D32_SFLOAT;
+        case GpuFormat::D16Unorm:
+            return VK_FORMAT_D16_UNORM;
         case GpuFormat::R32G32Float:
             return VK_FORMAT_R32G32_SFLOAT;
         case GpuFormat::R32G32B32Float:
@@ -274,7 +277,8 @@ VkFormat to_vk_format(GpuFormat format) {
 }
 
 VkImageAspectFlags to_vk_aspect(GpuFormat format) {
-    return format == GpuFormat::D32Float ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+    return (format == GpuFormat::D32Float || format == GpuFormat::D16Unorm) ? VK_IMAGE_ASPECT_DEPTH_BIT
+                                                                            : VK_IMAGE_ASPECT_COLOR_BIT;
 }
 
 VkImageAspectFlags to_vk_aspect_flags(GpuImageAspect aspect) {
@@ -722,6 +726,8 @@ bool GpuDriver::init() {
 
     VkPhysicalDeviceFeatures features = {};
     features.shaderInt64 = VK_TRUE;
+    features.samplerAnisotropy = f2.features.samplerAnisotropy;
+    g_ctx.anisotropy_supported = f2.features.samplerAnisotropy == VK_TRUE;
 
     const char* device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     VkDeviceCreateInfo dci = {};
@@ -1822,7 +1828,7 @@ GpuSampler GpuDriver::create_sampler(const GpuSamplerDesc& desc) {
     si.addressModeV = to_vk_address_mode(desc.address_v);
     si.addressModeW = to_vk_address_mode(desc.address_w);
     si.mipLodBias = desc.mip_lod_bias;
-    si.anisotropyEnable = desc.anisotropy_enable ? VK_TRUE : VK_FALSE;
+    si.anisotropyEnable = (desc.anisotropy_enable && g_ctx.anisotropy_supported) ? VK_TRUE : VK_FALSE;
     si.maxAnisotropy = desc.max_anisotropy;
     si.compareEnable = desc.compare_enable ? VK_TRUE : VK_FALSE;
     si.compareOp = to_vk_compare_op(desc.compare_op);
@@ -1918,6 +1924,18 @@ void GpuDriver::cmd_copy_to_image(GpuCmd handle, GpuImage dst, GpuBuffer src, ui
     region.imageSubresource = {img.aspect, mip, 0, img.array_layers};
     region.imageExtent = {std::max(1u, img.width >> mip), std::max(1u, img.height >> mip), std::max(1u, img.depth >> mip)};
     vkCmdCopyBufferToImage(g_cmds.resolve(handle).handle, g_buffers.resolve(src).handle, img.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+}
+
+void GpuDriver::cmd_copy_image(GpuCmd handle, GpuImage dst, GpuImage src) {
+    VulkanImage& s = g_images.resolve(src);
+    VulkanImage& d = g_images.resolve(dst);
+    assert(s.width == d.width && s.height == d.height && s.array_layers == d.array_layers);
+    VkImageCopy region = {};
+    region.srcSubresource = {s.aspect, 0, 0, s.array_layers};
+    region.dstSubresource = {d.aspect, 0, 0, d.array_layers};
+    region.extent = {s.width, s.height, s.depth};
+    vkCmdCopyImage(g_cmds.resolve(handle).handle, s.handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, d.handle,
+                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 }
 
 GpuSwapchain GpuDriver::create_swapchain(void* native_window, uint32_t width, uint32_t height) {

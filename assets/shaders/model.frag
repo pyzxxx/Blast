@@ -22,6 +22,10 @@ void main() {
         discard;
     }
 
+    if ((s.flags & k_mat_double_sided) != 0u && !gl_FrontFacing) {
+        s.normal = -s.normal;
+    }
+
     if ((s.shade_flags & k_shade_unlit) != 0u) {
         out_color = vec4(s.albedo + s.emissive, s.alpha);
         return;

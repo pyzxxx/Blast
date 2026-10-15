@@ -12,7 +12,6 @@
 
 #include <chrono>
 #include <cstdio>
-#include <cstdlib>
 
 bool Viewer::init(const Services& services) {
     assets_ = services.assets;
@@ -110,11 +109,24 @@ void Viewer::update(float dt) {
 
     ImGui::End();
 
+    if (dyn_root_ != k_object_invalid && dyn_animate_ && world_->valid(dyn_root_)) {
+        if (Transform* t = world_->get<Transform>(dyn_root_)) {
+            dyn_angle_ += dt * 0.8f;
+            const float h = dyn_angle_ * 0.5f;
+            t->set_rotation(glm::quat(glm::cos(h), 0.0f, glm::sin(h), 0.0f));
+        }
+    }
+
     camera_controller_.update(dt, *world_, *input_, *ui_);
 }
 
 void Viewer::shutdown() {
     clear_demo_lights();
+    if (dyn_set_ != k_loadset_invalid) {
+        sets_->release(dyn_set_);
+        dyn_set_ = k_loadset_invalid;
+        dyn_root_ = k_object_invalid;
+    }
 }
 
 void Viewer::draw_light_panel() {
@@ -127,6 +139,52 @@ void Viewer::draw_light_panel() {
         if (ImGui::SliderFloat("ambient lux", &lux, 0.01f, 10000.0f, "%.2f lx", ImGuiSliderFlags_Logarithmic)) {
             renderer_->set_ambient(lux, lux, lux);
         }
+    }
+
+    if (renderer_ != nullptr && ImGui::TreeNode("Shadows")) {
+        bool enabled = renderer_->shadow_enabled();
+        if (ImGui::Checkbox("enabled", &enabled)) {
+            renderer_->set_shadow_enabled(enabled);
+        }
+
+        bool local = renderer_->local_shadows_enabled();
+        if (ImGui::Checkbox("local shadows", &local)) {
+            renderer_->set_local_shadows_enabled(local);
+        }
+
+        float dist = renderer_->shadow_distance();
+        if (ImGui::SliderFloat("distance", &dist, 10.0f, 1000.0f, "%.0f m")) {
+            renderer_->set_shadow_distance(dist);
+        }
+
+        float radius = renderer_->shadow_pcss_radius();
+        if (ImGui::SliderFloat("pcss light size", &radius, 0.0f, 0.2f, "%.3f")) {
+            renderer_->set_shadow_pcss_radius(radius);
+        }
+
+        float bias = renderer_->shadow_depth_bias();
+        if (ImGui::SliderFloat("depth bias", &bias, 0.0f, 1.0f, "%.3f m")) {
+            renderer_->set_shadow_depth_bias(bias);
+        }
+
+        float nbias = renderer_->shadow_normal_bias();
+        if (ImGui::SliderFloat("normal bias", &nbias, 0.0f, 8.0f, "%.2f texel")) {
+            renderer_->set_shadow_normal_bias(nbias);
+        }
+
+        uint32_t full = 0, overlay = 0, cached = 0;
+        renderer_->shadow_stats(full, overlay, cached);
+        ImGui::Text("layers: %u full redraw, %u overlay, %u cached", full, overlay, cached);
+
+        if (ImGui::Button("spawn dynamic copy") && selected_ >= 0 && dyn_root_ == k_object_invalid) {
+            spawn_dynamic_copy();
+        }
+        if (dyn_root_ != k_object_invalid) {
+            ImGui::SameLine();
+            ImGui::Checkbox("animate", &dyn_animate_);
+        }
+
+        ImGui::TreePop();
     }
 
     static const char* k_type_names[] = {"point", "directional", "spot"};
@@ -173,6 +231,11 @@ void Viewer::draw_light_panel() {
                     ImGui::SliderFloat("outer deg", &outer, 1.0f, 89.0f)) {
                     lc.set_spot_angles(inner * k_deg2rad, outer * k_deg2rad);
                 }
+            }
+
+            bool cast = lc.cast_shadow();
+            if (ImGui::Checkbox("cast shadow", &cast)) {
+                lc.set_cast_shadow(cast);
             }
 
             ImGui::TreePop();
@@ -251,8 +314,44 @@ void Viewer::clear_demo_lights() {
     }
 }
 
+void Viewer::mark_dynamic_recursive(ObjectHandle h) {
+    if (MeshComponent* mc = world_->get<MeshComponent>(h)) {
+        mc->set_static(false);
+    }
+    if (world_->get<CameraComponent>(h)) {
+        world_->remove<CameraComponent>(h);
+    }
+    if (world_->get<LightComponent>(h)) {
+        world_->remove<LightComponent>(h);
+    }
+    world_->for_each_child(h, [this](ObjectHandle child) { mark_dynamic_recursive(child); });
+}
+
+void Viewer::spawn_dynamic_copy() {
+    if (dyn_set_ == k_loadset_invalid) {
+        dyn_set_ = sets_->create("dynamic-copy");
+    }
+
+    dyn_root_ = world_->spawn_prefab(scenes_[selected_].id, dyn_set_, AssetPriority::Normal);
+    if (dyn_root_ == k_object_invalid) {
+        return;
+    }
+
+    mark_dynamic_recursive(dyn_root_);
+    Transform& t = world_->add<Transform>(dyn_root_);
+    t.set_position(glm::vec3(0.0f, 6.0f, 0.0f));
+    t.set_scale(glm::vec3(0.05f));
+    dyn_angle_ = 0.0f;
+}
+
 void Viewer::load_scene(int index) {
     scene_t0_ = std::chrono::steady_clock::now();
+
+    if (dyn_set_ != k_loadset_invalid) {
+        sets_->release(dyn_set_);
+        dyn_set_ = k_loadset_invalid;
+        dyn_root_ = k_object_invalid;
+    }
 
     const LoadSet prev_loading = loading_set_;
     LoadSet next = sets_->create("scene");
@@ -279,8 +378,8 @@ void Viewer::load_scene(int index) {
     if (cameras_after == cameras_before) {
         ObjectHandle handle = world_->create_object(next);
         Transform& t = world_->add<Transform>(handle);
-        const glm::vec3 eye(15.0f, 8.0f, 0.0f);
-        const glm::vec3 target(0.0f, 4.0f, 0.0f);
+        glm::vec3 eye(15.0f, 8.0f, 0.0f);
+        glm::vec3 target(0.0f, 4.0f, 0.0f);
         const glm::mat4 view = glm::lookAt(eye, target, glm::vec3(0.0f, 1.0f, 0.0f));
         t.set_position(eye);
         t.set_rotation(glm::quat_cast(glm::inverse(view)));
@@ -290,7 +389,8 @@ void Viewer::load_scene(int index) {
     if (lights_after == lights_before) {
         ObjectHandle handle = world_->create_object(next);
         Transform& t = world_->add<Transform>(handle);
-        const glm::mat4 view = glm::lookAt(glm::vec3(0.0f), glm::vec3(-0.5f, -1.0f, -0.3f), glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::vec3 ldir(-0.5f, -1.0f, -0.3f);
+        const glm::mat4 view = glm::lookAt(glm::vec3(0.0f), ldir, glm::vec3(0.0f, 1.0f, 0.0f));
         t.set_rotation(glm::quat_cast(glm::inverse(view)));
         LightComponent& light = world_->add<LightComponent>(handle);
         light.set_light_type(LightComponent::k_type_directional);

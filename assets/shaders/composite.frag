@@ -6,7 +6,8 @@
 struct CompositeConsts {
     uint src_slot;
     float exposure;
-    uint pad[2];
+    uint pad0;
+    uint pad1;
 };
 
 layout(buffer_reference, std430) readonly buffer CompositeConstsRef { CompositeConsts value; };

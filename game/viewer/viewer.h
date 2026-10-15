@@ -35,6 +35,8 @@ private:
     void add_flashlight();
     void add_random_lights(uint32_t count);
     void clear_demo_lights();
+    void spawn_dynamic_copy();
+    void mark_dynamic_recursive(ObjectHandle h);
 
     AssetManager* assets_ = nullptr;
     LoadSets* sets_ = nullptr;
@@ -48,6 +50,10 @@ private:
     LoadSet scene_set_ = k_loadset_invalid;
     LoadSet loading_set_ = k_loadset_invalid;
     LoadSet light_set_ = k_loadset_invalid;
+    ObjectHandle dyn_root_ = k_object_invalid;
+    LoadSet dyn_set_ = k_loadset_invalid;
+    float dyn_angle_ = 0.0f;
+    bool dyn_animate_ = true;
     bool loading_ = false;
     int selected_ = -1;
     std::chrono::steady_clock::time_point scene_t0_{};

@@ -93,8 +93,15 @@ void Hierarchy::detach() {
     prev_sibling_ = k_object_invalid;
 }
 
-void Transform::mark_dirty() {
-    dirty_ = true;
+void MeshComponent::set_mesh(MeshHandle mesh) {
+    mesh_ = mesh;
+}
+
+void MeshComponent::set_static(bool v) {
+    is_static_ = v;
+}
+
+void Transform::mark_dirty() {    dirty_ = true;
     world()->for_each_child(owner(), [this](ObjectHandle child) {
         if (Transform* ct = world()->get<Transform>(child)) {
             ct->mark_dirty();
@@ -291,6 +298,7 @@ ObjectHandle World::spawn_prefab(uint64_t id, LoadSet set, AssetPriority priorit
                 MeshComponent& mc = add<MeshComponent>(e);
                 mc.set_mesh(mesh);
                 mc.set_material(material);
+                mc.set_static(true);
             } else {
                 LOGE("World: prefab %llu node %u mesh load failed", static_cast<uint64_t>(id), i);
             }
@@ -356,6 +364,10 @@ ObjectHandle World::spawn_prefab(uint64_t id, LoadSet set, AssetPriority priorit
                 } else {
                     lc.set_intensity_lumens(m * 800.0f);
                 }
+            }
+        } else if (comp.type == pak_format::k_component_static) {
+            if (MeshComponent* mc = get<MeshComponent>(e)) {
+                mc->set_static(comp.payload[0] != 0);
             }
         } else {
             LOGW("World: prefab %llu component %u unknown type %u, skipped",

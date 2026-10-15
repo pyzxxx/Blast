@@ -47,6 +47,7 @@ enum class GpuFormat : uint32_t {
     R8G8B8A8Unorm,
     B8G8R8A8Unorm,
     D32Float,
+    D16Unorm,
     R32G32Float,
     R32G32B32Float,
     R32G32B32A32Float,
@@ -455,6 +456,7 @@ public:
 
     void cmd_copy_buffer(GpuCmd, GpuBuffer dst, uint64_t dst_offset, GpuBuffer src, uint64_t src_offset, uint64_t size);
     void cmd_copy_to_image(GpuCmd, GpuImage dst, GpuBuffer src, uint64_t src_offset, uint32_t mip = 0);
+    void cmd_copy_image(GpuCmd, GpuImage dst, GpuImage src);
 
     GpuSwapchain create_swapchain(void* native_window, uint32_t width, uint32_t height);
     void destroy_swapchain(GpuSwapchain);

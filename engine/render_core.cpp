@@ -6,6 +6,21 @@
 
 #include <algorithm>
 
+static const GpuSamplerDesc k_sampler_presets[k_smp_preset_count] = {
+    {}, // k_smp_linear_repeat
+    {.address_u = GpuAddressMode::ClampToEdge, .address_v = GpuAddressMode::ClampToEdge, .address_w = GpuAddressMode::ClampToEdge}, // k_smp_linear_clamp_edge
+    {.address_u = GpuAddressMode::ClampToBorder, .address_v = GpuAddressMode::ClampToBorder, .address_w = GpuAddressMode::ClampToBorder,
+     .max_lod = 0.0f, .border_color = GpuBorderColor::FloatOpaqueWhite}, // k_smp_linear_clamp_border
+    {.mag_filter = GpuFilter::Nearest, .min_filter = GpuFilter::Nearest, .mipmap_mode = GpuMipmapMode::Nearest}, // k_smp_nearest_repeat
+    {.mag_filter = GpuFilter::Nearest, .min_filter = GpuFilter::Nearest, .mipmap_mode = GpuMipmapMode::Nearest,
+     .address_u = GpuAddressMode::ClampToEdge, .address_v = GpuAddressMode::ClampToEdge, .address_w = GpuAddressMode::ClampToEdge}, // k_smp_nearest_clamp_edge
+    {.anisotropy_enable = true, .max_anisotropy = 8.0f}, // k_smp_aniso_repeat
+    {.address_u = GpuAddressMode::ClampToBorder, .address_v = GpuAddressMode::ClampToBorder, .address_w = GpuAddressMode::ClampToBorder,
+     .compare_enable = true, .compare_op = GpuCompareOp::LessOrEqual,
+     .max_lod = 0.0f, .border_color = GpuBorderColor::FloatOpaqueWhite}, // k_smp_shadow_compare
+    {.address_u = GpuAddressMode::MirroredRepeat, .address_v = GpuAddressMode::MirroredRepeat, .address_w = GpuAddressMode::MirroredRepeat}, // k_smp_linear_mirror
+};
+
 bool RenderCore::Ring::init(GpuDriver& gpu, uint32_t ring_cap, GpuBufferUsage usage) {
     GpuBufferDesc desc = {.size = ring_cap, .usage = usage, .memory = GpuMemoryDomain::Upload};
     buffer = gpu.create_buffer(desc);
@@ -117,12 +132,18 @@ bool RenderCore::init(const Services& services) {
         return false;
     }
 
-    default_sampler_ = gpu_->create_sampler(GpuSamplerDesc{});
-    if (default_sampler_ == k_gpu_invalid) {
-        return false;
+    for (uint32_t i = 0; i < k_smp_preset_count; ++i) {
+        preset_samplers_[i] = k_gpu_invalid;
     }
 
-    gpu_->write_descriptor_sampler(resource_set_, 1, 0, default_sampler_);
+    for (uint32_t i = 0; i < k_smp_preset_count; ++i) {
+        preset_samplers_[i] = gpu_->create_sampler(k_sampler_presets[i]);
+        if (preset_samplers_[i] == k_gpu_invalid) {
+            return false;
+        }
+
+        gpu_->write_descriptor_sampler(resource_set_, 1, i, preset_samplers_[i]);
+    }
 
     free_resource_slots_ = static_cast<uint32_t*>(memalloc(sizeof(uint32_t) * k_heap_descriptor_count));
     if (!free_resource_slots_) {
@@ -144,7 +165,11 @@ void RenderCore::shutdown() {
     gpu_->wait_idle();
     process_delay_deletes(true);
     gpu_->destroy_descriptor_set(resource_set_);
-    gpu_->destroy_sampler(default_sampler_);
+    for (uint32_t i = 0; i < k_smp_preset_count; ++i) {
+        if (preset_samplers_[i] != k_gpu_invalid) {
+            gpu_->destroy_sampler(preset_samplers_[i]);
+        }
+    }
     gpu_->destroy_set_layout(resource_layout_);
     frame_ring_.shutdown(*gpu_);
     upload_ring_.shutdown(*gpu_);

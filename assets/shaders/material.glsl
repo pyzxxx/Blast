@@ -11,6 +11,7 @@ struct Surface {
     vec3 emissive;
     float alpha;
     uint shade_flags;
+    uint flags;
 };
 
 float hash_pix(uvec2 pix) {
@@ -61,6 +62,7 @@ Surface eval_material(MaterialBlock mb, vec2 uv, vec3 n, vec4 t) {
 
     s.emissive = p.emissive.rgb;
     s.shade_flags = p.shade_flags;
+    s.flags = p.flags;
     return s;
 }
 

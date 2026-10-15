@@ -14,11 +14,10 @@ layout(push_constant) uniform PushBlock {
 layout(set = 0, binding = 0) uniform texture2D tex_heap[];
 layout(set = 0, binding = 1) uniform sampler smp_heap[];
 
-#define k_default_sampler 0u
 #define k_invalid_slot 0xFFFFFFFFu
 
 vec4 sample_tex(uint slot, vec2 uv) {
-    return texture(sampler2D(tex_heap[nonuniformEXT(slot)], smp_heap[k_default_sampler]), uv);
+    return texture(sampler2D(tex_heap[nonuniformEXT(slot)], smp_heap[k_smp_linear_repeat]), uv);
 }
 
 layout(buffer_reference, std430) readonly buffer FrameConstsRef { FrameConsts value; };

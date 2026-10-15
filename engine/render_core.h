@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gpu_driver.h"
+#include "shader_interop.h"
 
 #include <deque>
 #include <unordered_map>
@@ -166,7 +167,7 @@ private:
 
     GpuDescriptorSetLayout resource_layout_ = k_gpu_invalid;
     GpuDescriptorSet resource_set_ = k_gpu_invalid;
-    GpuSampler default_sampler_ = k_gpu_invalid;
+    GpuSampler preset_samplers_[k_smp_preset_count] = {};
     std::unordered_map<GpuImageView, uint32_t> view_slots_;
     uint32_t* free_resource_slots_ = nullptr;
     uint32_t free_resource_top_ = 0;

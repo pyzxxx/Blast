@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <cstring>
 #include <new>
+#include <type_traits>
 
 using ObjectHandle = uint64_t;
 constexpr ObjectHandle k_object_invalid = k_handle_invalid;
@@ -108,13 +109,16 @@ class MeshComponent : public Component {
 public:
     MeshHandle mesh() const { return mesh_; }
     MaterialHandle material() const { return material_; }
+    bool is_static() const { return is_static_; }
 
-    void set_mesh(MeshHandle mesh) { mesh_ = mesh; }
+    void set_mesh(MeshHandle mesh);
     void set_material(MaterialHandle material) { material_ = material; }
+    void set_static(bool v);
 
 private:
     MeshHandle mesh_ = k_handle_invalid;
     MaterialHandle material_ = k_handle_invalid;
+    bool is_static_ = false;
 };
 
 class CameraComponent : public Component {
@@ -147,6 +151,7 @@ public:
     float range() const { return range_; }
     float spot_inner() const { return spot_inner_; }
     float spot_outer() const { return spot_outer_; }
+    bool cast_shadow() const { return cast_shadow_; }
 
     float intensity() const { return intensity_; }
 
@@ -177,6 +182,8 @@ public:
         spot_outer_ = outer > inner ? outer : inner;
     }
 
+    void set_cast_shadow(bool v) { cast_shadow_ = v; }
+
 private:
     uint32_t light_type_ = k_type_point;
     float color_[3] = {1.0f, 1.0f, 1.0f};
@@ -184,6 +191,7 @@ private:
     float range_ = 10.0f;
     float spot_inner_ = 25.0f * k_deg2rad;
     float spot_outer_ = 35.0f * k_deg2rad;
+    bool cast_shadow_ = true;
 };
 
 class ComponentPoolBase {

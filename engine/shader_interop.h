@@ -26,6 +26,16 @@ using uint = uint32_t;
 #define k_tex_mr       2u
 #define k_tex_count    8u
 
+#define k_smp_linear_repeat        0u
+#define k_smp_linear_clamp_edge    1u
+#define k_smp_linear_clamp_border  2u
+#define k_smp_nearest_repeat       3u
+#define k_smp_nearest_clamp_edge   4u
+#define k_smp_aniso_repeat         5u
+#define k_smp_shadow_compare       6u
+#define k_smp_linear_mirror        7u
+#define k_smp_preset_count         8u
+
 #define k_material_stride 128u
 
 #define k_light_directional 0x1u
@@ -35,7 +45,7 @@ struct Light {
     SH_VEC4(pos_range);
     SH_VEC4(color_flags);
     SH_VEC4(direction);
-    SH_VEC4(cones);
+    SH_VEC4(cones); // x = cos(inner), y = cos(outer), z = shadow entry index (-1 = none), w = pcss radius override
 };
 #ifdef __cplusplus
 static_assert(sizeof(Light) == 64);
@@ -78,6 +88,17 @@ struct DrawRecord {
     uint params_row;
     uint pad[2];
 };
+struct ShadowEntry {
+    SH_MAT4(view_proj);
+    SH_VEC4(params); // x = 1 / map_res, y = depth_bias (ndc), z = normal_offset (world), w = light size (angular, rad-ish)
+    uint slot;       // heap slot of this cascade's 2D layer view
+    float texel_world;  // world units per shadow texel
+    float depth_range;  // far - near of the cascade ortho (world)
+    uint pad[1];
+};
+#ifdef __cplusplus
+static_assert(sizeof(ShadowEntry) == 96);
+#endif
 struct FrameConsts {
     SH_MAT4(view_proj);
     SH_MAT4(view);
@@ -91,9 +112,14 @@ struct FrameConsts {
     float    cluster_scale;
     float    cluster_bias;
     SH_VEC4(ambient);
+    SH_VEC4(shadow_cascade_splits); // positive view-space depth of each cascade's far edge
+    uint64_t shadow_buf_addr;
+    uint     shadow_cascade_count;
+    float    shadow_map_res;
+    uint     shadow_pad[2];
 };
 #ifdef __cplusplus
-static_assert(sizeof(FrameConsts) == 288);
+static_assert(sizeof(FrameConsts) == 328);
 #endif
 
 #define k_cluster_max_lights 32u

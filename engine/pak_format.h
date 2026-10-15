@@ -70,6 +70,7 @@ static_assert(sizeof(PrefabNode) == 64);
 
 inline constexpr uint32_t k_component_camera = 1u;
 inline constexpr uint32_t k_component_light = 2u;
+inline constexpr uint32_t k_component_static = 3u;
 
 struct PrefabComponent {
     uint32_t node_index;

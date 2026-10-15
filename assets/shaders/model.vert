@@ -25,7 +25,7 @@ void main() {
     vec4 world = model * vec4(a_pos, 1.0);
 
     v_world_pos = world.xyz;
-    v_normal = mat3(model) * a_normal;
+    v_normal = mat3(transpose(inverse(model))) * a_normal;
     v_tangent = vec4(mat3(model) * a_tangent.xyz, a_tangent.w);
     v_uv = a_uv;
     v_draw_idx = draw_idx;
